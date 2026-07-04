@@ -26,7 +26,7 @@
 
       body {
         margin: 0;
-        width: 258px;
+        width: 300px;
         padding: 14px;
         background: linear-gradient(160deg, var(--bezel-1), var(--bezel-2));
         font-family: "IBM Plex Mono", ui-monospace, monospace;
@@ -252,6 +252,133 @@
         pointer-events: none;
       }
 
+      .channel-btn .ch-delete {
+        margin-left: auto;
+        flex-shrink: 0;
+        width: 16px;
+        height: 16px;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        line-height: 1;
+        color: #6b7c74;
+        opacity: 0;
+        transition: opacity 120ms ease, color 120ms ease, background 120ms ease;
+      }
+
+      .channel-btn:hover .ch-delete {
+        opacity: 1;
+      }
+
+      .channel-btn .ch-delete:hover {
+        color: #ff6b6b;
+        background: rgba(255, 107, 107, 0.12);
+      }
+
+      .add-btn {
+        border: 1px dashed rgba(255, 255, 255, 0.15);
+        background: transparent;
+        color: #6b7c74;
+      }
+
+      .add-btn:hover {
+        border-color: var(--phosphor-dim);
+        color: var(--phosphor);
+        background: rgba(77, 255, 176, 0.05);
+      }
+
+      .add-btn .ch-num {
+        color: inherit;
+        font-size: 15px;
+      }
+
+      .custom-form {
+        position: relative;
+        z-index: 1;
+        margin-top: 10px;
+        padding-top: 12px;
+        border-top: 1px dashed rgba(77, 255, 176, 0.18);
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+      }
+
+      .custom-form[hidden] {
+        display: none;
+      }
+
+      .custom-form input[type="text"],
+      .custom-form textarea {
+        width: 100%;
+        background: #04120b;
+        color: var(--phosphor);
+        border: 1px solid rgba(77, 255, 176, 0.2);
+        border-radius: 5px;
+        padding: 6px 8px;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 11px;
+        resize: vertical;
+      }
+
+      .custom-form input[type="text"]::placeholder,
+      .custom-form textarea::placeholder {
+        color: #4b5a52;
+      }
+
+      .custom-form textarea {
+        height: 96px;
+        line-height: 1.4;
+        white-space: pre;
+      }
+
+      .custom-form input[type="text"]:focus,
+      .custom-form textarea:focus {
+        outline: none;
+        border-color: var(--phosphor);
+        box-shadow: 0 0 0 1px var(--phosphor-dim);
+      }
+
+      .custom-error {
+        font-size: 10px;
+        color: #ff8a8a;
+        line-height: 1.4;
+        white-space: pre-wrap;
+        max-height: 60px;
+        overflow-y: auto;
+      }
+
+      .custom-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 6px;
+      }
+
+      .custom-actions button {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 11px;
+        border-radius: 5px;
+        padding: 5px 10px;
+        cursor: pointer;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.04);
+        color: #9fb8ac;
+      }
+
+      .custom-actions button:hover {
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      .custom-actions .primary {
+        border-color: var(--phosphor-dim);
+        color: var(--phosphor);
+      }
+
+      .custom-actions .primary:hover {
+        background: rgba(77, 255, 176, 0.12);
+      }
+
       .hint {
         margin: 10px 2px 0;
         font-size: 10px;
@@ -295,6 +422,25 @@
             <span class="ch-num">3</span>
             <span class="ch-label">GAME BOY</span>
           </button>
+          <div id="custom-channels"></div>
+          <button class="channel-btn add-btn" id="add-shader-btn" type="button">
+            <span class="ch-num">+</span>
+            <span class="ch-label">AGREGAR SHADER</span>
+          </button>
+        </div>
+
+        <div class="custom-form" id="custom-form" hidden>
+          <input type="text" id="custom-name" placeholder="Nombre del shader" maxlength="24" />
+          <textarea
+            id="custom-source"
+            spellcheck="false"
+            placeholder="// fragment shader GLSL&#10;// uniforms: uVideo (sampler2D), uTime (float), uResolution (vec2)&#10;// varying: vUv (vec2)"
+          ></textarea>
+          <div class="custom-error" id="custom-error"></div>
+          <div class="custom-actions">
+            <button type="button" id="custom-cancel">Cancelar</button>
+            <button type="button" id="custom-save" class="primary">Guardar</button>
+          </div>
         </div>
       </div>
     </div>

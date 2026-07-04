@@ -19,10 +19,23 @@
     return vertexSrcPromise;
   }
 
+  async function getCustomShaders() {
+    const { crtCustomShaders = [] } = await chrome.storage.local.get("crtCustomShaders");
+    return crtCustomShaders;
+  }
+
   function loadFragmentSrc(shaderKey) {
     if (!fragmentSrcCache.has(shaderKey)) {
-      const url = (SHADERS[shaderKey] || SHADERS[DEFAULT_SHADER]).url;
-      fragmentSrcCache.set(shaderKey, fetch(url).then((r) => r.text()));
+      const promise = (async () => {
+        if (SHADERS[shaderKey]) {
+          return fetch(SHADERS[shaderKey].url).then((r) => r.text());
+        }
+        const custom = (await getCustomShaders()).find((s) => s.id === shaderKey);
+        if (custom) return custom.source;
+        console.warn(`[CRT] Shader "${shaderKey}" no encontrado, usando el default.`);
+        return fetch(SHADERS[DEFAULT_SHADER].url).then((r) => r.text());
+      })();
+      fragmentSrcCache.set(shaderKey, promise);
     }
     return fragmentSrcCache.get(shaderKey);
   }
@@ -255,7 +268,7 @@
 
   chrome.storage.local.get({ crtEnabled: false, crtShader: DEFAULT_SHADER }, (stored) => {
     state.enabled = stored.crtEnabled;
-    state.shaderKey = SHADERS[stored.crtShader] ? stored.crtShader : DEFAULT_SHADER;
+    state.shaderKey = stored.crtShader || DEFAULT_SHADER;
     if (state.enabled) {
       activate();
     } else {

@@ -8,12 +8,18 @@ uniform sampler2D uVideo;
 uniform float uTime;
 uniform vec2 uResolution;
 
-const float CURVATURE_X = 0.05;
-const float CURVATURE_Y = 0.04;
+const float CURVATURE_X = 0.12;
+const float CURVATURE_Y = 0.1;
 const float SCANLINE_STRENGTH = 0.35;
 const float MASK_DARK = 0.82;
 const float ABERRATION = 0.0018;
 const float NOISE_AMOUNT = 0.025;
+
+// La distorsion de barril estira mas las esquinas que los bordes (el punto
+// (1,1) es siempre el que mas se estira). Dividiendo por ese estiramiento
+// maximo "reencuadramos" la imagen para que las esquinas vuelvan a tocar
+// justo el borde del cuadro, sin dejar huecos negros ni recortar contenido.
+const vec2 CORNER_STRETCH = vec2(1.0 + CURVATURE_X, 1.0 + CURVATURE_Y);
 
 vec2 warp(vec2 uv) {
   vec2 pos = uv * 2.0 - 1.0;
@@ -21,6 +27,7 @@ vec2 warp(vec2 uv) {
     1.0 + pos.y * pos.y * CURVATURE_X,
     1.0 + pos.x * pos.x * CURVATURE_Y
   );
+  pos /= CORNER_STRETCH;
   return pos * 0.5 + 0.5;
 }
 
@@ -51,12 +58,7 @@ float rand(vec2 co) {
 }
 
 void main() {
-  vec2 uv = warp(vUv);
-
-  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
-    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
-    return;
-  }
+  vec2 uv = clamp(warp(vUv), 0.0, 1.0);
 
   vec3 raw = vec3(
     texture2D(uVideo, uv + vec2(ABERRATION, 0.0)).r,
