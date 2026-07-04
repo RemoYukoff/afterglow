@@ -303,9 +303,41 @@
     activate();
   }
 
+  // Maximiza el <video> por CSS (sin la Fullscreen API nativa). La pantalla
+  // completa nativa manda el video a un overlay de pantalla completa que la
+  // captura del tab suele ver negro; agrandarlo por CSS lo deja gigante pero
+  // como elemento normal de la pagina, que si se captura. Se usa para el modo
+  // captura de DRM.
+  let maximizeStyleEl = null;
+  let maximizedVideo = null;
+
+  function maximizeVideo(on) {
+    if (on) {
+      const video = findVideo();
+      if (!video) return;
+      if (!maximizeStyleEl) {
+        maximizeStyleEl = document.createElement("style");
+        maximizeStyleEl.id = "__crt_maximize_style__";
+        maximizeStyleEl.textContent =
+          "html.__crt_maximized__, html.__crt_maximized__ body { overflow: hidden !important; background: #000 !important; }" +
+          ".__crt_maximized_video__ { position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; max-width: none !important; max-height: none !important; margin: 0 !important; object-fit: contain !important; background: #000 !important; z-index: 2147483646 !important; }";
+        (document.head || document.documentElement).appendChild(maximizeStyleEl);
+      }
+      document.documentElement.classList.add("__crt_maximized__");
+      video.classList.add("__crt_maximized_video__");
+      maximizedVideo = video;
+    } else {
+      document.documentElement.classList.remove("__crt_maximized__");
+      if (maximizedVideo) maximizedVideo.classList.remove("__crt_maximized_video__");
+      maximizedVideo = null;
+    }
+  }
+
   chrome.runtime.onMessage.addListener((message) => {
     if (message?.type === "CRT_SET_SHADER") {
       applySettings(message.enabled, message.shader);
+    } else if (message?.type === "CRT_MAXIMIZE_VIDEO") {
+      maximizeVideo(!!message.on);
     }
   });
 

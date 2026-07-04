@@ -9,7 +9,6 @@
     gameboy: chrome.runtime.getURL("shaders/gameboy.frag.glsl"),
   };
 
-  const stage = document.getElementById("stage");
   const canvas = document.getElementById("gl");
   const startPanel = document.getElementById("start-panel");
   const startBtn = document.getElementById("start-btn");
@@ -223,22 +222,8 @@
     }
   }
 
-  async function start() {
-    setError("");
-    try {
-      stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: { ideal: 60 } },
-        audio: false,
-      });
-    } catch (err) {
-      setError(
-        err && err.name === "NotAllowedError"
-          ? "Cancelaste la selección. Tocá de nuevo para elegir la pestaña del video."
-          : `No se pudo iniciar la captura: ${err && err.message ? err.message : err}`
-      );
-      return;
-    }
-
+  async function begin(mediaStream) {
+    stream = mediaStream;
     video.srcObject = stream;
     try {
       await video.play();
@@ -257,17 +242,57 @@
     stream.getVideoTracks()[0].addEventListener("ended", stopStream);
 
     startPanel.hidden = true;
-    hud.hidden = true;
+    hud.hidden = false;
+    const FS_HINT = "F o F11 = pantalla completa · NO maximices la ventana antes";
+    hud.textContent = FS_HINT;
+    setTimeout(() => {
+      if (hud.textContent === FS_HINT) hud.hidden = true;
+    }, 4500);
     switcherEl.hidden = false;
     await buildSwitcher();
     startTime = performance.now();
     renderFrame();
-    // Best-effort: entrar en pantalla completa. Si el navegador lo bloquea
-    // (la activación de usuario ya la consumió getDisplayMedia), queda la tecla F.
-    stage.requestFullscreen().catch(() => {});
     showBar();
     scheduleHide(2500); // un vistazo inicial y se esconde
     setTimeout(warnIfBlack, 1200);
+  }
+
+  // Arranque directo (desde el popup): consume el streamId de tabCapture, sin
+  // la barra "estás compartiendo" ni el selector de fuente.
+  async function startTab(streamId) {
+    setError("");
+    let s;
+    try {
+      s = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { mandatory: { chromeMediaSource: "tab", chromeMediaSourceId: streamId } },
+      });
+    } catch (_) {
+      // Si el streamId no sirve, dejamos el panel para el modo manual.
+      setError('No se pudo usar la captura directa. Tocá "Iniciar captura" para elegir la fuente.');
+      return;
+    }
+    await begin(s);
+  }
+
+  // Fallback manual: selector de Chrome (muestra la barra de compartir).
+  async function startDisplay() {
+    setError("");
+    let s;
+    try {
+      s = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: { ideal: 60 } },
+        audio: false,
+      });
+    } catch (err) {
+      setError(
+        err && err.name === "NotAllowedError"
+          ? "Cancelaste la selección. Tocá de nuevo para elegir la fuente."
+          : `No se pudo iniciar la captura: ${err && err.message ? err.message : err}`
+      );
+      return;
+    }
+    await begin(s);
   }
 
   function stopStream() {
@@ -282,7 +307,7 @@
     setError("La captura terminó. Podés volver a iniciarla.");
   }
 
-  startBtn.addEventListener("click", start);
+  startBtn.addEventListener("click", startDisplay);
 
   document.addEventListener("mousemove", (e) => {
     if (switcherEl.hidden) return;
@@ -290,16 +315,23 @@
     else scheduleHide(500);
   });
 
+  // F = pantalla completa (Fullscreen API). También sirve F11 (nativa de la
+  // ventana). Importante: la ventana NO debe estar maximizada antes, o el
+  // reproductor puede quedar negro. Teclas 1-9 cambian de filtro.
   document.addEventListener("keydown", (e) => {
     if (e.key === "f" || e.key === "F") {
-      if (!document.fullscreenElement) stage.requestFullscreen().catch(() => {});
+      if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
       else document.exitFullscreen().catch(() => {});
     } else if (/^[1-9]$/.test(e.key)) {
       const chip = switcherEl.querySelectorAll(".chip")[parseInt(e.key, 10) - 1];
       if (chip) applyShader(chip.dataset.key);
     }
-    // Cambiar de filtro por teclado muestra la barra un instante como feedback.
     showBar();
     scheduleHide(1800);
   });
+
+  // Arranque directo si el popup nos pasó un streamId de tabCapture (sin barra
+  // ni selector). Si no, queda el panel con el botón manual (getDisplayMedia).
+  const initialStreamId = params.get("streamId");
+  if (initialStreamId) startTab(initialStreamId);
 })();

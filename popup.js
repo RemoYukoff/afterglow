@@ -9,6 +9,7 @@ const builtinButtons = [...channelsEl.querySelectorAll(".channel-btn[data-key]")
 const customChannelsEl = document.getElementById("custom-channels");
 
 const captureBtn = document.getElementById("capture-btn");
+const restoreBtn = document.getElementById("restore-btn");
 
 const addShaderBtn = document.getElementById("add-shader-btn");
 const customForm = document.getElementById("custom-form");
@@ -179,8 +180,40 @@ builtinButtons.forEach((btn) => {
 
 captureBtn.addEventListener("click", async () => {
   const { crtShader = DEFAULT_SHADER } = await chrome.storage.local.get("crtShader");
-  const url = `${chrome.runtime.getURL("viewer.html")}?shader=${encodeURIComponent(crtShader)}`;
-  await chrome.tabs.create({ url });
+  const tab = await getActiveTab();
+
+  // Maximiza el video de la pestaña por CSS (no fullscreen nativo, que se
+  // capturaria negro) para que la captura sea casi todo video.
+  if (tab?.id) {
+    chrome.tabs.sendMessage(tab.id, { type: "CRT_MAXIMIZE_VIDEO", on: true }).catch(() => {});
+  }
+
+  // tabCapture: captura la pestaña sin la barra "estás compartiendo" ni el
+  // selector. Si falla, el viewer cae al modo manual (getDisplayMedia).
+  let streamId = null;
+  try {
+    if (tab?.id && chrome.tabCapture?.getMediaStreamId) {
+      streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id });
+    }
+  } catch (_) {
+    streamId = null;
+  }
+
+  let url = `${chrome.runtime.getURL("viewer.html")}?shader=${encodeURIComponent(crtShader)}`;
+  if (streamId) url += `&streamId=${encodeURIComponent(streamId)}`;
+  // Ventana nueva (no pestaña): así es un target de alt-tab aparte y la podés
+  // poner en pantalla completa con F11 sin tocar la ventana de Crunchyroll.
+  // Estado "normal" (flotante, NO maximizada): si arranca maximizada, el F11
+  // no toma bien la captura.
+  await chrome.windows.create({ url, focused: true, state: "normal", width: 1280, height: 760 });
+  window.close();
+});
+
+restoreBtn.addEventListener("click", async () => {
+  const tab = await getActiveTab();
+  if (tab?.id) {
+    chrome.tabs.sendMessage(tab.id, { type: "CRT_MAXIMIZE_VIDEO", on: false }).catch(() => {});
+  }
   window.close();
 });
 

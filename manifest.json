@@ -3,7 +3,7 @@
   "name": "CRT Shader para video (prototipo)",
   "version": "0.1.0",
   "description": "Superpone un shader CRT en tiempo real sobre cualquier video de la pagina usando WebGL.",
-  "permissions": ["activeTab", "storage"],
+  "permissions": ["activeTab", "storage", "tabCapture"],
   "action": {
     "default_popup": "popup.html"
   },

@@ -432,6 +432,21 @@
         color: #6b7c74;
         line-height: 1.4;
       }
+
+      .restore-link {
+        margin-top: 6px;
+        border: none;
+        background: transparent;
+        color: #7a7780;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 10px;
+        letter-spacing: 0.02em;
+        cursor: pointer;
+        padding: 2px 0;
+      }
+      .restore-link:hover {
+        color: var(--phosphor);
+      }
     </style>
   </head>
   <body>
@@ -484,9 +499,10 @@
             MODO CAPTURA (DRM)
           </button>
           <p class="capture-sub">
-            Para videos con DRM (Crunchyroll). Abre una pestaña que captura y le
-            aplica el shader. Elegí la pestaña del video en el selector.
+            Para videos con DRM (Crunchyroll). Maximiza el video, lo captura sin
+            barras y le aplica el shader en una ventana nueva.
           </p>
+          <button class="restore-link" id="restore-btn" type="button">↺ Restaurar tamaño del video</button>
         </div>
 
         <div class="custom-form" id="custom-form" hidden>

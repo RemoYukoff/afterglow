@@ -18,6 +18,11 @@ const float NOISE_AMOUNT_PRE = 0.045; // grano antes del blur (se funde con la r
 const float NOISE_AMOUNT_POST = 0.025; // grano despues del blur (queda nitido encima)
 const float BLUR_SPREAD = 1.4; // separacion entre muestras del blur general, en texels
 
+// Paleta de CRT viejo: menos gama de color que una pantalla moderna.
+const float SATURATION = 0.85;                    // cromas mas apagados (NTSC/consumer)
+const vec3 WHITE_TINT = vec3(1.03, 1.0, 0.93);    // punto blanco mas calido
+const float COLOR_LEVELS = 22.0;                  // niveles por canal (bandeo retro; el grano lo difumina)
+
 // Rejilla de celdas de fosforo: celdas ligeramente mas altas que anchas,
 // brillantes en el centro y apagadas hacia el borde (glow suave, no un
 // recorte plano con un borde duro).
@@ -131,6 +136,13 @@ void main() {
   color *= vig;
 
   color = toSrgb(clamp(color, 0.0, 1.0));
+
+  // Grado de color "viejo CRT": desaturar un poco, calentar el blanco y
+  // reducir la profundidad de color. El grano post disimula el bandeo.
+  float luma = dot(color, vec3(0.299, 0.587, 0.114));
+  color = mix(vec3(luma), color, SATURATION);
+  color *= WHITE_TINT;
+  color = floor(clamp(color, 0.0, 1.0) * COLOR_LEVELS + 0.5) / COLOR_LEVELS;
 
   float noisePost = (rand(uv * 1.37 + fract(uTime) * 1.7) - 0.5) * NOISE_AMOUNT_POST;
   color += noisePost;
