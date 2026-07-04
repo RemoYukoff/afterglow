@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "CRT Shader para YouTube (prototipo)",
+  "version": "0.1.0",
+  "description": "Superpone un shader CRT en tiempo real sobre el video de YouTube usando WebGL.",
+  "permissions": ["activeTab", "storage"],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://www.youtube.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["shaders/*.glsl"],
+      "matches": ["*://www.youtube.com/*"]
+    }
+  ]
+}

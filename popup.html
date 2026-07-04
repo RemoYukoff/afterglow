@@ -1,0 +1,304 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=VT323&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --phosphor: #4dffb0;
+        --phosphor-dim: rgba(77, 255, 176, 0.32);
+        --phosphor-glow: rgba(77, 255, 176, 0.55);
+        --screen-black: #040a07;
+        --bezel-1: #2c2a2e;
+        --bezel-2: #19181a;
+        --bezel-edge: #423f44;
+        --off-grey: #5c5960;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        width: 258px;
+        padding: 14px;
+        background: linear-gradient(160deg, var(--bezel-1), var(--bezel-2));
+        font-family: "IBM Plex Mono", ui-monospace, monospace;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .shell {
+        border-radius: 14px;
+        padding: 3px;
+        background: linear-gradient(155deg, #4a474c, #131214);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.06),
+          0 6px 18px rgba(0, 0, 0, 0.45);
+      }
+
+      .screen {
+        position: relative;
+        border-radius: 11px;
+        background: radial-gradient(120% 140% at 50% 0%, #0a1a12 0%, var(--screen-black) 70%);
+        overflow: hidden;
+        padding: 16px 14px 12px;
+        box-shadow:
+          inset 0 0 0 1px rgba(0, 0, 0, 0.6),
+          inset 0 2px 10px rgba(0, 0, 0, 0.8);
+      }
+
+      .screen::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: repeating-linear-gradient(
+          to bottom,
+          rgba(0, 0, 0, 0.35) 0px,
+          rgba(0, 0, 0, 0.35) 1px,
+          transparent 1px,
+          transparent 3px
+        );
+        mix-blend-mode: multiply;
+        opacity: 0.55;
+      }
+
+      .screen::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        box-shadow: inset 0 0 26px 4px rgba(0, 0, 0, 0.75);
+        border-radius: 11px;
+      }
+
+      .screen.powering-on {
+        animation: boot-flicker 420ms ease-out;
+      }
+
+      @keyframes boot-flicker {
+        0% {
+          filter: brightness(2.6);
+        }
+        8% {
+          filter: brightness(0.4);
+        }
+        20% {
+          filter: brightness(1.8);
+        }
+        35% {
+          filter: brightness(0.7);
+        }
+        100% {
+          filter: brightness(1);
+        }
+      }
+
+      .status-row {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding-bottom: 14px;
+        margin-bottom: 12px;
+        border-bottom: 1px dashed rgba(77, 255, 176, 0.18);
+      }
+
+      .power {
+        display: inline-flex;
+        cursor: pointer;
+      }
+      .power input {
+        position: absolute;
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+
+      .power-track {
+        position: relative;
+        width: 46px;
+        height: 25px;
+        border-radius: 999px;
+        background: #0d0d0e;
+        box-shadow:
+          inset 0 2px 4px rgba(0, 0, 0, 0.8),
+          inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+        transition: box-shadow 200ms ease;
+      }
+
+      .power input:checked ~ .power-track {
+        box-shadow:
+          inset 0 2px 4px rgba(0, 0, 0, 0.6),
+          inset 0 0 0 1px rgba(77, 255, 176, 0.4),
+          0 0 10px var(--phosphor-glow);
+      }
+
+      .power-knob {
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 21px;
+        height: 21px;
+        border-radius: 50%;
+        background: linear-gradient(155deg, #6b6870, #38363a);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1), background 200ms ease;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+      }
+
+      .power input:checked ~ .power-track .power-knob {
+        transform: translateX(21px);
+        background: radial-gradient(circle at 35% 30%, #a6ffdb, var(--phosphor) 70%);
+      }
+
+      .power-knob svg {
+        width: 12px;
+        height: 12px;
+        stroke: #1c1c1c;
+        opacity: 0.85;
+      }
+
+      .status-text {
+        font-family: "VT323", monospace;
+        font-size: 22px;
+        line-height: 1;
+        letter-spacing: 0.06em;
+        color: var(--off-grey);
+        text-shadow: none;
+        transition: color 200ms ease, text-shadow 200ms ease;
+      }
+
+      .status-text.on {
+        color: var(--phosphor);
+        text-shadow: 0 0 8px var(--phosphor-glow);
+      }
+
+      .channels {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+      }
+
+      .channel-btn {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        width: 100%;
+        border: none;
+        text-align: left;
+        cursor: pointer;
+        padding: 8px 10px;
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.03);
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+        color: #9fb8ac;
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 12px;
+        font-weight: 500;
+        letter-spacing: 0.03em;
+        transition: background 150ms ease, color 150ms ease, box-shadow 150ms ease;
+      }
+
+      .channel-btn:hover {
+        background: rgba(255, 255, 255, 0.06);
+      }
+
+      .channel-btn .led {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #3a3a3a;
+        flex-shrink: 0;
+        transition: background 150ms ease, box-shadow 150ms ease;
+      }
+
+      .channel-btn .ch-num {
+        font-family: "VT323", monospace;
+        font-size: 16px;
+        color: #6b7c74;
+        width: 12px;
+        flex-shrink: 0;
+      }
+
+      .channel-btn.active {
+        background: rgba(77, 255, 176, 0.1);
+        color: var(--phosphor);
+        box-shadow: inset 0 0 0 1px rgba(77, 255, 176, 0.35);
+      }
+
+      .channel-btn.active .led {
+        background: var(--phosphor);
+        box-shadow: 0 0 6px var(--phosphor-glow);
+      }
+
+      .channel-btn.active .ch-num {
+        color: var(--phosphor);
+      }
+
+      .channels.disabled .channel-btn {
+        opacity: 0.4;
+        pointer-events: none;
+      }
+
+      .hint {
+        margin: 10px 2px 0;
+        font-size: 10px;
+        color: #7a7780;
+        letter-spacing: 0.02em;
+        line-height: 1.4;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <div class="screen" id="screen">
+        <div class="status-row">
+          <label class="power">
+            <input type="checkbox" id="power-input" />
+            <span class="power-track">
+              <span class="power-knob">
+                <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round">
+                  <path d="M12 3v7" />
+                  <path d="M6.5 6.5a7 7 0 1 0 11 0" />
+                </svg>
+              </span>
+            </span>
+          </label>
+          <span class="status-text" id="status-text">STANDBY</span>
+        </div>
+
+        <div class="channels" id="channels">
+          <button class="channel-btn" data-key="crt" type="button">
+            <span class="led"></span>
+            <span class="ch-num">1</span>
+            <span class="ch-label">CRT</span>
+          </button>
+          <button class="channel-btn" data-key="thermal" type="button">
+            <span class="led"></span>
+            <span class="ch-num">2</span>
+            <span class="ch-label">TERMICO</span>
+          </button>
+          <button class="channel-btn" data-key="gameboy" type="button">
+            <span class="led"></span>
+            <span class="ch-num">3</span>
+            <span class="ch-label">GAME BOY</span>
+          </button>
+        </div>
+      </div>
+    </div>
+    <p class="hint">Se aplica en la pestaña activa de youtube.com</p>
+    <script src="popup.js"></script>
+  </body>
+</html>
