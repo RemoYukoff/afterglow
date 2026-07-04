@@ -21,7 +21,7 @@ const float BLUR_SPREAD = 1.4; // separacion entre muestras del blur general, en
 // Rejilla de celdas de fosforo: celdas ligeramente mas altas que anchas,
 // brillantes en el centro y apagadas hacia el borde (glow suave, no un
 // recorte plano con un borde duro).
-const vec2 GRID_CELL = vec2(4.5, 6.2);
+const vec2 GRID_CELL = vec2(7.2, 9.9);
 const float GRID_DARK = 0.02;
 const float GRID_FALLOFF = 2.6;
 const float GRID_TONE = 2.0 / (1.0 + GRID_DARK);

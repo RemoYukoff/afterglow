@@ -8,6 +8,8 @@ const channelsEl = document.getElementById("channels");
 const builtinButtons = [...channelsEl.querySelectorAll(".channel-btn[data-key]")];
 const customChannelsEl = document.getElementById("custom-channels");
 
+const captureBtn = document.getElementById("capture-btn");
+
 const addShaderBtn = document.getElementById("add-shader-btn");
 const customForm = document.getElementById("custom-form");
 const customNameInput = document.getElementById("custom-name");
@@ -83,7 +85,7 @@ async function persist(next) {
   chrome.tabs
     .sendMessage(tab.id, { type: "CRT_SET_SHADER", enabled: stored.crtEnabled, shader: stored.crtShader })
     .catch(() => {
-      // El content script puede no estar inyectado (pestaña distinta a youtube.com o recien abierta).
+      // El content script puede no estar inyectado todavia (pestaña recien abierta).
     });
 }
 
@@ -173,6 +175,13 @@ builtinButtons.forEach((btn) => {
   btn.addEventListener("click", () => {
     persist({ crtEnabled: true, crtShader: btn.dataset.key });
   });
+});
+
+captureBtn.addEventListener("click", async () => {
+  const { crtShader = DEFAULT_SHADER } = await chrome.storage.local.get("crtShader");
+  const url = `${chrome.runtime.getURL("viewer.html")}?shader=${encodeURIComponent(crtShader)}`;
+  await chrome.tabs.create({ url });
+  window.close();
 });
 
 addShaderBtn.addEventListener("click", () => toggleCustomForm(true));

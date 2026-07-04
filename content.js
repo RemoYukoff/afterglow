@@ -85,7 +85,51 @@
   }
 
   function findVideo() {
-    return document.querySelector("video.html5-main-video") || document.querySelector("#movie_player video") || document.querySelector("video");
+    const ytVideo = document.querySelector("video.html5-main-video") || document.querySelector("#movie_player video");
+    if (ytVideo) return ytVideo;
+
+    const videos = [...document.querySelectorAll("video")];
+    if (videos.length === 0) return null;
+    return videos.reduce((largest, v) =>
+      v.clientWidth * v.clientHeight > largest.clientWidth * largest.clientHeight ? v : largest
+    );
+  }
+
+  // DRM (Widevine, etc.) suele hacer que el frame decodificado llegue como
+  // negro puro a cualquier lectura de pixeles, sin lanzar una excepcion de
+  // seguridad. Probamos con un canvas 2D chico, independiente de WebGL,
+  // para detectar esto antes de montar el overlay y quedarnos con un
+  // rectangulo negro pegado sobre el video.
+  function readVideoSample(video) {
+    const probe = document.createElement("canvas");
+    probe.width = 4;
+    probe.height = 4;
+    const ctx = probe.getContext("2d");
+    try {
+      ctx.drawImage(video, 0, 0, 4, 4);
+      return ctx.getImageData(0, 0, 4, 4).data;
+    } catch (err) {
+      return null; // canvas "tainted" (CORS o DRM)
+    }
+  }
+
+  function isSampleBlack(data) {
+    if (!data) return true;
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i] > 8 || data[i + 1] > 8 || data[i + 2] > 8) return false;
+    }
+    return true;
+  }
+
+  async function canCaptureVideo(video) {
+    if (!isSampleBlack(readVideoSample(video))) return true;
+
+    const startTime = video.currentTime;
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    if (!isSampleBlack(readVideoSample(video))) return true;
+
+    const advanced = !video.paused && video.currentTime > startTime;
+    return !advanced;
   }
 
   function setupOverlay(video, vertexSrc, fragmentSrc) {
@@ -218,10 +262,19 @@
   async function activate() {
     if (state.canvas || activating || !state.enabled) return;
     const video = findVideo();
-    if (!video) return;
+    if (!video || video.readyState < 2) return;
 
     activating = true;
     try {
+      if (!(await canCaptureVideo(video))) {
+        console.warn(
+          "[CRT] Este video parece protegido (DRM) y solo entrega frames negros al leerlo. Desactivando el efecto en esta pestaña."
+        );
+        state.enabled = false;
+        return;
+      }
+      if (!state.enabled || state.canvas) return;
+
       const [vertexSrc, fragmentSrc] = await Promise.all([
         loadVertexSrc(),
         loadFragmentSrc(state.shaderKey),

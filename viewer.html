@@ -1,0 +1,161 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>CRT · Modo captura</title>
+    <style>
+      :root {
+        --phosphor: #4dffb0;
+        --phosphor-glow: rgba(77, 255, 176, 0.55);
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        height: 100%;
+        background: #000;
+        overflow: hidden;
+        font-family: "IBM Plex Mono", ui-monospace, monospace;
+        color: #cfe;
+      }
+      #stage {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #gl {
+        max-width: 100%;
+        max-height: 100%;
+        display: block;
+      }
+
+      .panel {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        text-align: center;
+        padding: 24px;
+        background: radial-gradient(120% 120% at 50% 30%, #08130d 0%, #000 70%);
+      }
+      .panel[hidden] { display: none; }
+
+      .panel h1 {
+        font-size: 20px;
+        letter-spacing: 0.08em;
+        color: var(--phosphor);
+        text-shadow: 0 0 10px var(--phosphor-glow);
+        margin: 0;
+      }
+      .panel p {
+        max-width: 460px;
+        font-size: 13px;
+        line-height: 1.6;
+        color: #9fb8ac;
+        margin: 0;
+      }
+      .panel small { color: #6b7c74; }
+
+      button.action {
+        margin-top: 6px;
+        border: 1px solid rgba(77, 255, 176, 0.4);
+        background: rgba(77, 255, 176, 0.08);
+        color: var(--phosphor);
+        border-radius: 8px;
+        padding: 12px 22px;
+        font-family: inherit;
+        font-size: 14px;
+        letter-spacing: 0.05em;
+        cursor: pointer;
+        transition: background 150ms ease;
+      }
+      button.action:hover { background: rgba(77, 255, 176, 0.18); }
+
+      #error { color: #ff8a8a; font-size: 12px; min-height: 16px; white-space: pre-wrap; }
+
+      #hud {
+        position: fixed;
+        top: 10px;
+        left: 12px;
+        font-size: 11px;
+        color: rgba(77, 255, 176, 0.7);
+        text-shadow: 0 0 6px rgba(0, 0, 0, 0.8);
+        pointer-events: none;
+        opacity: 0.75;
+      }
+
+      #switcher {
+        position: fixed;
+        left: 50%;
+        bottom: 18px;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 6px;
+        padding: 6px;
+        border-radius: 10px;
+        background: rgba(6, 14, 10, 0.82);
+        box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(77, 255, 176, 0.15);
+        backdrop-filter: blur(4px);
+        transition: opacity 220ms ease;
+        z-index: 10;
+      }
+      #switcher[hidden] { display: none; }
+      #switcher.faded { opacity: 0; pointer-events: none; }
+
+      .chip {
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.03);
+        color: #9fb8ac;
+        border-radius: 7px;
+        padding: 7px 12px;
+        font-family: inherit;
+        font-size: 12px;
+        letter-spacing: 0.03em;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: background 120ms ease, color 120ms ease, box-shadow 120ms ease;
+      }
+      .chip:hover { background: rgba(255, 255, 255, 0.07); }
+      .chip .num {
+        color: #6b7c74;
+        margin-right: 6px;
+        font-size: 11px;
+      }
+      .chip.active {
+        color: var(--phosphor);
+        background: rgba(77, 255, 176, 0.12);
+        box-shadow: inset 0 0 0 1px rgba(77, 255, 176, 0.4), 0 0 10px var(--phosphor-glow);
+      }
+      .chip.active .num { color: var(--phosphor); }
+    </style>
+  </head>
+  <body>
+    <div id="stage"><canvas id="gl"></canvas></div>
+
+    <div class="panel" id="start-panel">
+      <h1>CRT · MODO CAPTURA</h1>
+      <p>
+        Para video con DRM (Crunchyroll, etc.). Se captura la imagen ya renderizada
+        del video y se le aplica el shader acá. El audio sigue en la pestaña original.
+        <br /><br />
+        <b>1 monitor:</b> en el selector elegí la <b>pestaña</b> del video (compartir
+        la pantalla entera haría un bucle de espejo).
+        <br />
+        <b>2 monitores:</b> podés compartir la <b>pantalla</b> del video y ver esto
+        en el otro monitor.
+      </p>
+      <button class="action" id="start-btn">▶ Iniciar captura</button>
+      <div id="error"></div>
+      <small>Pantalla completa al iniciar (F alterna) · Para cambiar de filtro: mové el mouse abajo o tocá 1/2/3</small>
+    </div>
+
+    <div id="hud" hidden></div>
+    <div id="switcher" hidden></div>
+
+    <script src="viewer.js"></script>
+  </body>
+</html>
