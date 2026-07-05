@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Afterglow — store screenshot generator</title>
+<style>
+  html, body { margin: 0; background: #0b0e13; width: 1280px; height: 800px; overflow: hidden; }
+  #gl { display: block; width: 1280px; height: 720px; }
+  #bar { height: 80px; display: flex; align-items: center; gap: 14px; padding: 0 28px; box-sizing: border-box; font-family: system-ui, "Segoe UI", sans-serif; }
+  #bar img { width: 44px; height: 44px; }
+  .name { color: #fff; font-size: 26px; font-weight: 800; letter-spacing: 6px; }
+  .tag { color: #8fa39a; font-size: 15px; margin-left: 8px; }
+  .chip { margin-left: auto; color: #4dffb0; border: 1px solid #2a4d3d; background: #101820; border-radius: 6px; padding: 8px 14px; font-size: 14px; letter-spacing: 2px; }
+</style>
+</head>
+<body>
+<canvas id="gl" width="1280" height="720"></canvas>
+<div id="bar">
+  <img src="/icons/icon48.png" alt="">
+  <span class="name">AFTERGLOW</span>
+  <span class="tag">Retro display filters for any video</span>
+  <span class="chip" id="chip"></span>
+</div>
+<script>
+(async () => {
+  const key = new URLSearchParams(location.search).get('shader') || 'crt';
+  const LABELS = { crt: 'CRT', gameboy: 'GAME BOY', gbc: 'GB COLOR', virtualboy: 'VIRTUAL BOY', psx: 'PS1' };
+  document.getElementById('chip').textContent = 'FILTER · ' + (LABELS[key] || key.toUpperCase());
+
+  // Source image: a procedural retro test card (no copyrighted media),
+  // designed so every filter has something to show off: color bars for the
+  // CRT mask and chroma bleed, a gradient for the PS1 dither, and text for
+  // the GBC pixel grid.
+  const src = document.createElement('canvas');
+  src.width = 1920; src.height = 1080;
+  const x = src.getContext('2d');
+
+  const bars = ['#c0c0c0', '#c0c000', '#00c0c0', '#00c000', '#c000c0', '#c00000', '#0000c0'];
+  const bw = src.width / 7;
+  bars.forEach((c, i) => { x.fillStyle = c; x.fillRect(i * bw, 0, bw + 1, src.height * 0.62); });
+
+  const rev = ['#0000c0', '#131313', '#c000c0', '#131313', '#00c0c0', '#131313', '#c0c0c0'];
+  rev.forEach((c, i) => { x.fillStyle = c; x.fillRect(i * bw, src.height * 0.62, bw + 1, src.height * 0.08); });
+
+  const g = x.createLinearGradient(0, 0, src.width, 0);
+  g.addColorStop(0, '#000'); g.addColorStop(1, '#fff');
+  x.fillStyle = g;
+  x.fillRect(0, src.height * 0.70, src.width, src.height * 0.30);
+
+  x.strokeStyle = 'rgba(255,255,255,0.9)';
+  x.lineWidth = 6;
+  x.beginPath();
+  x.arc(src.width / 2, src.height * 0.42, 300, 0, Math.PI * 2);
+  x.stroke();
+
+  x.fillStyle = 'rgba(0,0,0,0.6)';
+  x.fillRect(src.width / 2 - 460, src.height * 0.42 - 130, 920, 240);
+  x.fillStyle = '#fff';
+  x.textAlign = 'center';
+  x.font = '900 120px system-ui, sans-serif';
+  x.fillText('AFTERGLOW', src.width / 2, src.height * 0.42 + 5);
+  x.font = '500 42px system-ui, sans-serif';
+  x.fillStyle = '#cfe8dc';
+  x.fillText('RETRO DISPLAY FILTERS', src.width / 2, src.height * 0.42 + 75);
+
+  x.textAlign = 'left';
+  x.font = '700 44px Consolas, monospace';
+  x.fillStyle = '#fff';
+  x.fillText('CH 03', 44, 76);
+  x.textAlign = 'right';
+  x.fillText('16:9 · 60 Hz', src.width - 44, 76);
+
+  // Minimal WebGL pipeline, same as the tester.
+  const canvas = document.getElementById('gl');
+  const gl = canvas.getContext('webgl', { antialias: false, preserveDrawingBuffer: true });
+  const [vsSrc, fsSrc] = await Promise.all([
+    fetch('/shaders/vertex.glsl').then(r => r.text()),
+    fetch(`/shaders/${key}.frag.glsl`).then(r => r.text()),
+  ]);
+
+  function compile(type, source) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, source);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    return s;
+  }
+  const prog = gl.createProgram();
+  gl.attachShader(prog, compile(gl.VERTEX_SHADER, vsSrc));
+  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, fsSrc));
+  gl.linkProgram(prog);
+  gl.useProgram(prog);
+
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+  const aPosition = gl.getAttribLocation(prog, 'aPosition');
+  gl.enableVertexAttribArray(aPosition);
+  gl.vertexAttribPointer(aPosition, 2, gl.FLOAT, false, 0, 0);
+
+  const tex = gl.createTexture();
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
+
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.uniform1f(gl.getUniformLocation(prog, 'uTime'), 3.7); // frozen instant
+  gl.uniform2f(gl.getUniformLocation(prog, 'uResolution'), canvas.width, canvas.height);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  document.title = 'ready:' + key;
+})();
+</script>
+</body>
+</html>
