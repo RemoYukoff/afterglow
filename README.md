@@ -31,7 +31,7 @@ DRM frames read as pure black without throwing, so detection is heuristic (`cont
 
 ### Shader contract
 
-Fragment shaders are standalone GLSL ES 1.00 files in `shaders/`, hot-swappable at runtime:
+Fragment shaders are standalone GLSL ES 1.00 files in `src/shaders/`, hot-swappable at runtime:
 
 ```glsl
 varying vec2 vUv;            // 0..1 quad coordinates
@@ -42,19 +42,21 @@ uniform vec2 uResolution;    // canvas size in px (matches video resolution)
 
 User-defined shaders (popup → "ADD SHADER") are validated by compiling against a throwaway WebGL context before being stored in `chrome.storage.local`.
 
-The CRT shader is the deep one: virtual low-res scanline source, brightness-dependent Gaussian beam, bandwidth-limited luma with delayed wide chroma, aperture grille fixed to `gl_FragCoord`, halation, radial misconvergence, edge defocus, curvature/overscan/vignette. Every parameter is a documented constant at the top of [`shaders/crt.frag.glsl`](shaders/crt.frag.glsl) — tune and hot-reload.
+The CRT shader is the deep one: virtual low-res scanline source, brightness-dependent Gaussian beam, bandwidth-limited luma with delayed wide chroma, aperture grille fixed to `gl_FragCoord`, halation, radial misconvergence, edge defocus, curvature/overscan/vignette. Every parameter is a documented constant at the top of [`src/shaders/crt.frag.glsl`](src/shaders/crt.frag.glsl) — tune and hot-reload.
 
 ## Repo layout
 
 ```
-manifest.json          MV3, permissions: activeTab, scripting, storage, tabCapture
-content.js             overlay path + DRM heuristics + remote-control replay
-popup.html / popup.js  TV-styled UI, on-demand injection, custom shader editor
-viewer.html / viewer.js  capture-mode window
-shaders/               vertex.glsl + one fragment shader per filter
-test/                  dev tooling (never shipped in the zip)
-store-assets/          Chrome Web Store listing screenshots
-.github/workflows/     CI: zip artifact, GitHub Release, Web Store publish
+src/                     the extension itself — Load unpacked points here
+  manifest.json          MV3, permissions: activeTab, scripting, storage, tabCapture
+  content.js             overlay path + DRM heuristics + remote-control replay
+  popup.html / popup.js  TV-styled UI, on-demand injection, custom shader editor
+  viewer.html / viewer.js  capture-mode window
+  shaders/               vertex.glsl + one fragment shader per filter
+  icons/                 toolbar/store icons
+test/                    dev tooling (never shipped in the zip)
+store-assets/            Chrome Web Store listing screenshots + 512px icon
+.github/workflows/       CI: zip artifact, GitHub Release, Web Store publish
 ```
 
 ## Development
@@ -63,19 +65,19 @@ store-assets/          Chrome Web Store listing screenshots
 node test/server.js        # → http://localhost:8123/test/
 ```
 
-Zero-dependency static server + hot-reloading test bench: it re-reads `shaders/*.glsl` from disk every 400 ms and recompiles on change, keeping the last good program and surfacing the compiler log on errors. Drop any frame at `test/test.png` to test against.
+Zero-dependency static server + hot-reloading test bench: it re-reads `src/shaders/*.glsl` from disk every 400 ms and recompiles on change, keeping the last good program and surfacing the compiler log on errors. Drop any frame at `test/test.png` to test against.
 
 - `1-9` switch shaders · `space` freezes `uTime` · `O` overlays the original
 - `?shader=name` adds any extra shader file as a channel
 - `test/promo.html?shader=name` regenerates the 1280×800 store screenshots from a procedural test card
 
-To run the extension itself: `chrome://extensions` → Developer mode → **Load unpacked** → repo root. Shader edits need an extension reload; UI/JS edits too. That's why the test bench exists — iterate there, reload once.
+To run the extension itself: `chrome://extensions` → Developer mode → **Load unpacked** → select the `src/` folder. Shader edits need an extension reload; UI/JS edits too. That's why the test bench exists — iterate there, reload once.
 
 ## Release flow
 
 Every push builds `afterglow-extension.zip` (extension files only) as an Actions artifact. Pushing a `vX.Y.Z` tag additionally:
 
-1. stamps `X.Y.Z` into `manifest.json`,
+1. stamps `X.Y.Z` into `src/manifest.json`,
 2. attaches the zip to a GitHub Release,
 3. uploads + submits to the Chrome Web Store via `chrome-webstore-upload-cli`, if the `CHROME_EXTENSION_ID` / `CHROME_CLIENT_ID` / `CHROME_CLIENT_SECRET` / `CHROME_REFRESH_TOKEN` secrets are set (skips gracefully otherwise).
 

@@ -22,17 +22,15 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           V="${GITHUB_REF_NAME#v}"
-          jq --arg v "$V" '.version = $v' manifest.json > manifest.tmp
-          mv manifest.tmp manifest.json
+          jq --arg v "$V" '.version = $v' src/manifest.json > manifest.tmp
+          mv manifest.tmp src/manifest.json
 
-      # No build step: the extension is plain JS/GLSL. Package only the files
-      # Chrome needs, leaving out the dev test bench and repo housekeeping.
+      # No build step: the extension is plain JS/GLSL and src/ contains
+      # exactly what Chrome needs, with the manifest at the zip root.
       - name: Package extension zip
         run: |
           mkdir -p out
-          zip -r out/afterglow-extension.zip \
-            manifest.json content.js popup.html popup.js viewer.html viewer.js shaders icons \
-            -x "icons/icon512.png"
+          (cd src && zip -r ../out/afterglow-extension.zip .)
 
       - uses: actions/upload-artifact@v4
         with:

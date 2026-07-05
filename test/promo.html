@@ -16,7 +16,7 @@
 <body>
 <canvas id="gl" width="1280" height="720"></canvas>
 <div id="bar">
-  <img src="/icons/icon48.png" alt="">
+  <img src="/src/icons/icon48.png" alt="">
   <span class="name">AFTERGLOW</span>
   <span class="tag">Retro display filters for any video</span>
   <span class="chip" id="chip"></span>
@@ -74,8 +74,8 @@
   const canvas = document.getElementById('gl');
   const gl = canvas.getContext('webgl', { antialias: false, preserveDrawingBuffer: true });
   const [vsSrc, fsSrc] = await Promise.all([
-    fetch('/shaders/vertex.glsl').then(r => r.text()),
-    fetch(`/shaders/${key}.frag.glsl`).then(r => r.text()),
+    fetch('/src/shaders/vertex.glsl').then(r => r.text()),
+    fetch(`/src/shaders/${key}.frag.glsl`).then(r => r.text()),
   ]);
 
   function compile(type, source) {

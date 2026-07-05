@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><style>body{background:#888;margin:20px}canvas{display:block;margin:8px 0}</style></head>
+<body>
+<canvas id="c512" width="512" height="512"></canvas>
+<canvas id="c128" width="128" height="128"></canvas>
+<canvas id="c48" width="48" height="48"></canvas>
+<canvas id="c32" width="32" height="32"></canvas>
+<canvas id="c16" width="16" height="16"></canvas>
+<script>
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function draw(size) {
+  const c = document.getElementById('c' + size);
+  const ctx = c.getContext('2d');
+  const s = size;
+  const u = s / 128; // unidad base
+  const small = s <= 32;
+
+  ctx.clearRect(0, 0, s, s);
+
+  // tubo: cuadrado redondeado oscuro con leve gradiente vertical
+  const m = Math.max(1, 4 * u);            // margen transparente
+  const r = 26 * u;                        // radio de esquina
+  const bg = ctx.createLinearGradient(0, m, 0, s - m);
+  bg.addColorStop(0, '#141a22');
+  bg.addColorStop(0.5, '#0b0e13');
+  bg.addColorStop(1, '#05070a');
+  roundRect(ctx, m, m, s - 2 * m, s - 2 * m, r);
+  ctx.fillStyle = bg;
+  ctx.fill();
+
+  // recorte interior: todo lo que sigue queda dentro del tubo
+  ctx.save();
+  roundRect(ctx, m, m, s - 2 * m, s - 2 * m, r);
+  ctx.clip();
+
+  // scanlines sutiles (solo en tamaños donde no ensucian)
+  if (!small) {
+    ctx.globalAlpha = 0.16;
+    ctx.fillStyle = '#000';
+    const pitch = Math.max(3 * u, 3);
+    for (let y = m; y < s - m; y += pitch) {
+      ctx.fillRect(m, y, s - 2 * m, Math.max(1, pitch * 0.4));
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  const cy = s / 2;
+
+  // resplandor ambiental del fósforo
+  const halo = ctx.createRadialGradient(s / 2, cy, 0, s / 2, cy, s * 0.52);
+  halo.addColorStop(0, 'rgba(77,255,176,0.55)');
+  halo.addColorStop(0.35, 'rgba(77,255,176,0.18)');
+  halo.addColorStop(1, 'rgba(77,255,176,0)');
+  ctx.fillStyle = halo;
+  ctx.fillRect(0, 0, s, s);
+
+  // linea horizontal de colapso: brillante al centro, se apaga a los lados
+  const lineHalf = small ? 1.2 * u * 4 : 3.2 * u;   // media altura del nucleo
+  const grad = ctx.createLinearGradient(m, 0, s - m, 0);
+  grad.addColorStop(0, 'rgba(77,255,176,0)');
+  grad.addColorStop(0.18, 'rgba(77,255,176,0.75)');
+  grad.addColorStop(0.5, 'rgba(210,255,235,1)');
+  grad.addColorStop(0.82, 'rgba(77,255,176,0.75)');
+  grad.addColorStop(1, 'rgba(77,255,176,0)');
+
+  // glow de la linea (pasadas apiladas, mas anchas y tenues)
+  for (const [mult, alpha] of [[6, 0.10], [3.4, 0.22], [1.9, 0.5], [1, 1]]) {
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = grad;
+    const h = lineHalf * mult;
+    ctx.fillRect(m, cy - h, s - 2 * m, 2 * h);
+  }
+  ctx.globalAlpha = 1;
+
+  // punto central blanco-caliente
+  const dotR = small ? 3.6 * u * 4 : 9 * u;
+  const dot = ctx.createRadialGradient(s / 2, cy, 0, s / 2, cy, dotR);
+  dot.addColorStop(0, '#ffffff');
+  dot.addColorStop(0.35, '#eafff5');
+  dot.addColorStop(0.7, 'rgba(77,255,176,0.9)');
+  dot.addColorStop(1, 'rgba(77,255,176,0)');
+  ctx.fillStyle = dot;
+  ctx.beginPath();
+  ctx.arc(s / 2, cy, dotR, 0, Math.PI * 2);
+  ctx.fill();
+
+  // brillo del vidrio: media luna tenue arriba
+  if (!small) {
+    const sheen = ctx.createLinearGradient(0, m, 0, s * 0.42);
+    sheen.addColorStop(0, 'rgba(255,255,255,0.10)');
+    sheen.addColorStop(1, 'rgba(255,255,255,0)');
+    roundRect(ctx, m, m, s - 2 * m, s * 0.4, r);
+    ctx.fillStyle = sheen;
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+for (const size of [512, 128, 48, 32, 16]) draw(size);
+</script>
+</body>
+</html>
