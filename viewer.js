@@ -1,6 +1,17 @@
 (() => {
   const params = new URLSearchParams(location.search);
   const shaderKey = params.get("shader") || "crt";
+  const srcTab = params.get("srcTab") ? parseInt(params.get("srcTab"), 10) : null;
+
+  // Reenvía input del viewer al tab del reproductor (control remoto).
+  function remote(payload) {
+    if (srcTab == null || !stream) return;
+    chrome.tabs.sendMessage(srcTab, { type: "CRT_REMOTE", ...payload }).catch(() => {});
+  }
+
+  function forwardKey(evtype, e) {
+    remote({ kind: "key", evtype, key: e.key, code: e.code, keyCode: e.keyCode });
+  }
 
   const VERTEX_SHADER_URL = chrome.runtime.getURL("shaders/vertex.glsl");
   const BUILTIN = {
@@ -239,11 +250,14 @@
       return;
     }
 
-    stream.getVideoTracks()[0].addEventListener("ended", stopStream);
+    // Si el tab capturado se cierra (o se detiene la captura), la pista termina.
+    // Cerramos esta ventana en vez de mostrar el panel: volver al panel llevaría
+    // al modo manual (getDisplayMedia), que sí muestra el banner de compartir.
+    stream.getVideoTracks()[0].addEventListener("ended", () => window.close());
 
     startPanel.hidden = true;
     hud.hidden = false;
-    const FS_HINT = "F o F11 = pantalla completa · NO maximices la ventana antes";
+    const FS_HINT = "F o F11 = pantalla completa";
     hud.textContent = FS_HINT;
     setTimeout(() => {
       if (hud.textContent === FS_HINT) hud.hidden = true;
@@ -325,9 +339,25 @@
     } else if (/^[1-9]$/.test(e.key)) {
       const chip = switcherEl.querySelectorAll(".chip")[parseInt(e.key, 10) - 1];
       if (chip) applyShader(chip.dataset.key);
+    } else {
+      // Cualquier otra tecla (espacio, flechas, etc.) va al reproductor.
+      forwardKey("keydown", e);
     }
     showBar();
     scheduleHide(1800);
+  });
+
+  document.addEventListener("keyup", (e) => {
+    if (e.key === "f" || e.key === "F" || /^[1-9]$/.test(e.key)) return;
+    forwardKey("keyup", e);
+  });
+
+  // Click sobre el video -> click en la misma posición del reproductor
+  // (play/pausa). Mapeo por coordenadas normalizadas del canvas.
+  canvas.addEventListener("click", (e) => {
+    const w = canvas.clientWidth || 1;
+    const h = canvas.clientHeight || 1;
+    remote({ kind: "click", u: e.offsetX / w, v: e.offsetY / h });
   });
 
   // Arranque directo si el popup nos pasó un streamId de tabCapture (sin barra

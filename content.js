@@ -303,33 +303,52 @@
     activate();
   }
 
-  // Maximiza el <video> por CSS (sin la Fullscreen API nativa). La pantalla
-  // completa nativa manda el video a un overlay de pantalla completa que la
-  // captura del tab suele ver negro; agrandarlo por CSS lo deja gigante pero
-  // como elemento normal de la pagina, que si se captura. Se usa para el modo
-  // captura de DRM.
-  let maximizeStyleEl = null;
-  let maximizedVideo = null;
-
+  // Simula la tecla "f" (atajo de pantalla completa de Crunchyroll) sobre la
+  // página, para ver si el reproductor entra en fullscreen por sí solo. Nota:
+  // el navegador puede rechazar el requestFullscreen del player porque el
+  // evento es sintético (sin gesto real del usuario); esto es para probarlo.
   function maximizeVideo(on) {
-    if (on) {
+    if (!on) return;
+    const init = { key: "f", code: "KeyF", keyCode: 70, which: 70, bubbles: true, cancelable: true, composed: true };
+    const video = findVideo();
+    for (const target of [document, video, document.body].filter(Boolean)) {
+      target.dispatchEvent(new KeyboardEvent("keydown", init));
+      target.dispatchEvent(new KeyboardEvent("keyup", init));
+    }
+  }
+
+  // Control remoto desde el viewer: reproduce en esta pagina el teclado/click
+  // que hace el usuario sobre la ventana DRM. Son eventos sinteticos
+  // (isTrusted:false), asi que sirven para los atajos del reproductor y el
+  // play/pausa, pero no para acciones que exijan un gesto real del usuario.
+  function remoteControl(msg) {
+    if (msg.kind === "key") {
+      const init = {
+        key: msg.key,
+        code: msg.code,
+        keyCode: msg.keyCode,
+        which: msg.keyCode,
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+      };
       const video = findVideo();
-      if (!video) return;
-      if (!maximizeStyleEl) {
-        maximizeStyleEl = document.createElement("style");
-        maximizeStyleEl.id = "__crt_maximize_style__";
-        maximizeStyleEl.textContent =
-          "html.__crt_maximized__, html.__crt_maximized__ body { overflow: hidden !important; background: #000 !important; }" +
-          ".__crt_maximized_video__ { position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; max-width: none !important; max-height: none !important; margin: 0 !important; object-fit: contain !important; background: #000 !important; z-index: 2147483646 !important; }";
-        (document.head || document.documentElement).appendChild(maximizeStyleEl);
+      for (const target of [document, video].filter(Boolean)) {
+        target.dispatchEvent(new KeyboardEvent(msg.evtype || "keydown", init));
       }
-      document.documentElement.classList.add("__crt_maximized__");
-      video.classList.add("__crt_maximized_video__");
-      maximizedVideo = video;
-    } else {
-      document.documentElement.classList.remove("__crt_maximized__");
-      if (maximizedVideo) maximizedVideo.classList.remove("__crt_maximized_video__");
-      maximizedVideo = null;
+    } else if (msg.kind === "click") {
+      const x = Math.round((msg.u || 0) * window.innerWidth);
+      const y = Math.round((msg.v || 0) * window.innerHeight);
+      const el = document.elementFromPoint(x, y) || document.body;
+      const opts = { clientX: x, clientY: y, bubbles: true, cancelable: true, composed: true, view: window };
+      for (const t of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) {
+        const Ctor = t.startsWith("pointer") ? PointerEvent : MouseEvent;
+        try {
+          el.dispatchEvent(new Ctor(t, opts));
+        } catch (_) {
+          /* algunos navegadores exigen campos extra en PointerEvent */
+        }
+      }
     }
   }
 
@@ -338,6 +357,8 @@
       applySettings(message.enabled, message.shader);
     } else if (message?.type === "CRT_MAXIMIZE_VIDEO") {
       maximizeVideo(!!message.on);
+    } else if (message?.type === "CRT_REMOTE") {
+      remoteControl(message);
     }
   });
 

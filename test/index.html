@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>Shader tester — crt-tv</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #101014; color: #ddd; font: 13px/1.4 system-ui, sans-serif; overflow: hidden; }
+  #stage { position: absolute; inset: 0 0 34px 0; display: flex; align-items: center; justify-content: center; }
+  canvas, #original { max-width: 100%; max-height: 100%; }
+  #original { position: absolute; display: none; }
+  body.show-original #original { display: block; }
+  #bar { position: absolute; left: 0; right: 0; bottom: 0; height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 10px; background: #1a1a20; border-top: 1px solid #2c2c34; box-sizing: border-box; }
+  #bar button { background: #2c2c34; color: #ddd; border: 0; border-radius: 4px; padding: 4px 10px; cursor: pointer; font: inherit; }
+  #bar button.active { background: #4a6cf7; color: #fff; }
+  #status { margin-left: auto; opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #status.ok { color: #7dd87d; }
+  #error { position: absolute; left: 10px; right: 10px; top: 10px; padding: 10px 12px; background: rgba(120, 20, 20, 0.92); color: #ffdcdc; border-radius: 6px; white-space: pre-wrap; font-family: Consolas, monospace; font-size: 12px; display: none; z-index: 5; }
+  body.has-error #error { display: block; }
+  .hint { opacity: 0.5; }
+</style>
+</head>
+<body>
+  <div id="stage">
+    <canvas id="gl"></canvas>
+    <img id="original" alt="original" />
+  </div>
+  <pre id="error"></pre>
+  <div id="bar">
+    <span id="shaders"></span>
+    <span class="hint">[1-9] shader · [espacio] pausa uTime · [O] original · guardá el .glsl y se recarga solo</span>
+    <span id="status">iniciando…</span>
+  </div>
+
+<script>
+(() => {
+  // Shaders disponibles: los builtin + cualquier ?shader=nombre (sin .frag.glsl).
+  const params = new URLSearchParams(location.search);
+  const SHADERS = ["crt", "thermal", "gameboy"];
+  const extra = params.get("shader");
+  if (extra && !SHADERS.includes(extra)) SHADERS.push(extra);
+  let current = extra || "crt";
+
+  const IMAGE_URL = "/test/test.png";
+  const VERTEX_URL = "/shaders/vertex.glsl";
+  const fragUrl = (key) => `/shaders/${key}.frag.glsl`;
+  const POLL_MS = 400;
+
+  const canvas = document.getElementById("gl");
+  const statusEl = document.getElementById("status");
+  const errorEl = document.getElementById("error");
+  const shadersEl = document.getElementById("shaders");
+  const originalEl = document.getElementById("original");
+
+  let gl, texture, program = null;
+  let uTime, uResolution;
+  let lastVertexSrc = null, lastFragSrc = null;
+  let time = 0, paused = false, lastFrame = performance.now();
+
+  function setStatus(msg, ok) {
+    statusEl.textContent = msg;
+    statusEl.classList.toggle("ok", !!ok);
+  }
+  function setError(msg) {
+    errorEl.textContent = msg || "";
+    document.body.classList.toggle("has-error", !!msg);
+  }
+
+  async function fetchText(url) {
+    const r = await fetch(url + "?t=" + Date.now(), { cache: "no-store" });
+    if (!r.ok) throw new Error(`${r.status} al pedir ${url}`);
+    return r.text();
+  }
+
+  function compile(type, source) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, source);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+      const log = gl.getShaderInfoLog(s);
+      gl.deleteShader(s);
+      throw new Error(log);
+    }
+    return s;
+  }
+
+  // Recompila con las últimas fuentes. Si falla, deja el programa anterior
+  // en uso y muestra el log del compilador (con número de línea) arriba.
+  function rebuild() {
+    let vs, fs;
+    try {
+      vs = compile(gl.VERTEX_SHADER, lastVertexSrc);
+      fs = compile(gl.FRAGMENT_SHADER, lastFragSrc);
+    } catch (err) {
+      setError(`Error compilando "${current}":\n${err.message}`);
+      setStatus("error de compilación — usando la última versión buena");
+      return;
+    }
+    const prog = gl.createProgram();
+    gl.attachShader(prog, vs);
+    gl.attachShader(prog, fs);
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+      setError(`Error enlazando "${current}":\n${gl.getProgramInfoLog(prog)}`);
+      return;
+    }
+    if (program) gl.deleteProgram(program);
+    program = prog;
+    gl.useProgram(program);
+    const aPosition = gl.getAttribLocation(program, "aPosition");
+    gl.enableVertexAttribArray(aPosition);
+    gl.vertexAttribPointer(aPosition, 2, gl.FLOAT, false, 0, 0);
+    uTime = gl.getUniformLocation(program, "uTime");
+    uResolution = gl.getUniformLocation(program, "uResolution");
+    setError("");
+    setStatus(`"${current}" recargado ${new Date().toLocaleTimeString()}`, true);
+  }
+
+  // Poll: re-lee los .glsl del disco y recompila solo si cambió el texto.
+  async function poll() {
+    try {
+      const [v, f] = await Promise.all([fetchText(VERTEX_URL), fetchText(fragUrl(current))]);
+      if (v !== lastVertexSrc || f !== lastFragSrc) {
+        lastVertexSrc = v;
+        lastFragSrc = f;
+        rebuild();
+      }
+    } catch (err) {
+      setStatus(`sin conexión con el server: ${err.message}`);
+    }
+  }
+
+  function switchShader(key) {
+    current = key;
+    lastFragSrc = null; // fuerza rebuild en el próximo poll
+    document.querySelectorAll("#shaders button").forEach((b) =>
+      b.classList.toggle("active", b.dataset.key === key)
+    );
+    poll();
+  }
+
+  function buildButtons() {
+    SHADERS.forEach((key, i) => {
+      const b = document.createElement("button");
+      b.dataset.key = key;
+      b.textContent = `${i + 1} ${key}`;
+      b.classList.toggle("active", key === current);
+      b.addEventListener("click", () => switchShader(key));
+      shadersEl.appendChild(b);
+    });
+  }
+
+  function render() {
+    requestAnimationFrame(render);
+    const now = performance.now();
+    if (!paused) time += (now - lastFrame) / 1000;
+    lastFrame = now;
+    if (!program) return;
+    gl.uniform1f(uTime, time);
+    gl.uniform2f(uResolution, canvas.width, canvas.height);
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+
+  async function main() {
+    const img = new Image();
+    img.src = IMAGE_URL;
+    await img.decode();
+    originalEl.src = IMAGE_URL;
+
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+
+    gl = canvas.getContext("webgl", { antialias: false });
+    if (!gl) {
+      setStatus("WebGL no disponible");
+      return;
+    }
+    gl.viewport(0, 0, canvas.width, canvas.height);
+
+    // Mismo setup que viewer.js: quad + textura con flip Y y clamp.
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+
+    texture = gl.createTexture();
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+
+    buildButtons();
+    await poll();
+    setInterval(poll, POLL_MS);
+    render();
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === " ") {
+      paused = !paused;
+      e.preventDefault();
+    } else if (e.key.toLowerCase() === "o") {
+      document.body.classList.toggle("show-original");
+    } else if (/^[1-9]$/.test(e.key)) {
+      const key = SHADERS[parseInt(e.key, 10) - 1];
+      if (key) switchShader(key);
+    }
+  });
+
+  main();
+})();
+</script>
+</body>
+</html>

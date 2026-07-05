@@ -9,7 +9,6 @@ const builtinButtons = [...channelsEl.querySelectorAll(".channel-btn[data-key]")
 const customChannelsEl = document.getElementById("custom-channels");
 
 const captureBtn = document.getElementById("capture-btn");
-const restoreBtn = document.getElementById("restore-btn");
 
 const addShaderBtn = document.getElementById("add-shader-btn");
 const customForm = document.getElementById("custom-form");
@@ -201,19 +200,12 @@ captureBtn.addEventListener("click", async () => {
 
   let url = `${chrome.runtime.getURL("viewer.html")}?shader=${encodeURIComponent(crtShader)}`;
   if (streamId) url += `&streamId=${encodeURIComponent(streamId)}`;
+  if (tab?.id != null) url += `&srcTab=${tab.id}`; // para reenviarle teclado/click desde el viewer
   // Ventana nueva (no pestaña): así es un target de alt-tab aparte y la podés
   // poner en pantalla completa con F11 sin tocar la ventana de Crunchyroll.
   // Estado "normal" (flotante, NO maximizada): si arranca maximizada, el F11
   // no toma bien la captura.
   await chrome.windows.create({ url, focused: true, state: "normal", width: 1280, height: 760 });
-  window.close();
-});
-
-restoreBtn.addEventListener("click", async () => {
-  const tab = await getActiveTab();
-  if (tab?.id) {
-    chrome.tabs.sendMessage(tab.id, { type: "CRT_MAXIMIZE_VIDEO", on: false }).catch(() => {});
-  }
   window.close();
 });
 

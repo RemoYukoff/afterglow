@@ -8,27 +8,30 @@ uniform sampler2D uVideo;
 uniform float uTime;
 uniform vec2 uResolution;
 
-const float CURVATURE_X = 0.03;
-const float CURVATURE_Y = 0.02;
-const float SCANLINE_STRENGTH = 0.08;
-const float SCANLINE_SCROLL = 1.0; // pixeles por segundo: deriva vertical tipo TV vieja
-const float MASK_DARK = 0.82;
-const float ABERRATION = 0.0011;
-const float NOISE_AMOUNT_PRE = 0.045; // grano antes del blur (se funde con la rejilla)
-const float NOISE_AMOUNT_POST = 0.025; // grano despues del blur (queda nitido encima)
-const float BLUR_SPREAD = 1.4; // separacion entre muestras del blur general, en texels
+const float CURVATURE_X = 0.04;
+const float CURVATURE_Y = 0.03;
+const float SCANLINE_STRENGTH = 0.15;
+const float SCANLINE_SCROLL = 2.0; // pixeles por segundo: deriva vertical tipo TV vieja
+const float MASK_DARK = 0.4;
+// Desconvergencia radial: los tres canones convergen bien en el centro y se
+// desalinean hacia bordes y esquinas (R y B empujados en direcciones radiales
+// opuestas), como un CRT real. ~1.5 px de corrimiento en la esquina a 1080p.
+const float MISCONVERGENCE = 0.003;
+const float NOISE_AMOUNT_PRE = 0.01; // grano antes del blur (se funde con la rejilla)
+const float BLUR_SPREAD = 1.; // separacion entre muestras del blur general, en texels
 
 // Paleta de CRT viejo: menos gama de color que una pantalla moderna.
-const float SATURATION = 0.85;                    // cromas mas apagados (NTSC/consumer)
-const vec3 WHITE_TINT = vec3(1.03, 1.0, 0.93);    // punto blanco mas calido
-const float COLOR_LEVELS = 22.0;                  // niveles por canal (bandeo retro; el grano lo difumina)
+const float COLOR_LEVELS = 6.0;                  // niveles por canal (bandeo retro; el grano lo difumina)
 
 // Rejilla de celdas de fosforo: celdas ligeramente mas altas que anchas,
 // brillantes en el centro y apagadas hacia el borde (glow suave, no un
-// recorte plano con un borde duro).
-const vec2 GRID_CELL = vec2(7.2, 9.9);
-const float GRID_DARK = 0.02;
-const float GRID_FALLOFF = 2.6;
+// recorte plano con un borde duro). GRID_SIZE es el unico dial de tamano:
+// el alto de la celda sale del ancho por GRID_ASPECT.
+const float GRID_SIZE = 5.;   // ancho de celda en pixeles
+const float GRID_ASPECT = 1.3; // alto = ancho * proporcion
+const vec2 GRID_CELL = vec2(GRID_SIZE, GRID_SIZE * GRID_ASPECT);
+const float GRID_DARK = .0;
+const float GRID_FALLOFF = 1.;
 const float GRID_TONE = 2.0 / (1.0 + GRID_DARK);
 
 // La distorsion de barril estira mas las esquinas que los bordes (el punto
@@ -73,6 +76,17 @@ float rand(vec2 co) {
   return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
+// Un pixel fisico solo puede mostrar un color a la vez: el video se
+// muestrea una unica vez por celda de la rejilla (en el centro de la
+// celda), en vez de dejar que el contenido varie con suavidad dentro de
+// una misma celda como si fuera una pantalla de resolucion infinita.
+// En las celdas parciales del borde el centro puede caer algo fuera de
+// [0,1]; la textura del video usa CLAMP_TO_EDGE, asi que es inocuo.
+vec2 cellCenterUv(vec2 uv) {
+  vec2 cell = floor(uv * uResolution / GRID_CELL) + 0.5;
+  return cell * GRID_CELL / uResolution;
+}
+
 // Brillo por celda: coseno alzado en cada eje (1.0 en el centro, 0.0 en el
 // borde) combinado en un glow rectangular, sin corte plano ni borde duro.
 float pixelGrid(vec2 pixelCoord) {
@@ -87,10 +101,19 @@ float pixelGrid(vec2 pixelCoord) {
 // fundir cada celda con sus vecinas, como el desenfoque optico de una
 // pantalla CRT real que no existe al renderizar en pantallas nuevas.
 vec3 shadeAt(vec2 uv) {
+  // El contenido queda congelado al color del centro de su celda: todos
+  // los fragmentos de una celda leen el mismo texel del video. La
+  // desconvergencia desplaza ligeramente que parte del fotograma le toca a
+  // cada canal, pero sigue habiendo un solo color por celda y canal.
+  vec2 videoUv = cellCenterUv(uv);
+  // Crece con el cuadrado de la distancia al centro: el area central queda
+  // limpia y el corrimiento aparece recien hacia bordes y esquinas.
+  vec2 radial = uv - 0.5;
+  vec2 converge = radial * dot(radial, radial) * MISCONVERGENCE;
   vec3 raw = vec3(
-    texture2D(uVideo, uv + vec2(ABERRATION, 0.0)).r,
-    texture2D(uVideo, uv).g,
-    texture2D(uVideo, uv - vec2(ABERRATION, 0.0)).b
+    texture2D(uVideo, videoUv + converge).r,
+    texture2D(uVideo, videoUv).g,
+    texture2D(uVideo, videoUv - converge).b
   );
   vec3 color = toLinear(raw);
 
@@ -109,12 +132,6 @@ vec3 shadeAt(vec2 uv) {
   // Gap oscuro entre cada celda de fosforo, horizontal y vertical.
   float grid = pixelGrid(uv * uResolution);
   color *= grid * GRID_TONE;
-
-  // El grano pre-blur se suma despues de la rejilla para que el propio
-  // blur lo funda con ella, rompiendo su regularidad en vez de quedar
-  // como una capa de ruido nitida encima de un patron perfecto.
-  float noisePre = (rand(uv + fract(uTime)) - 0.5) * NOISE_AMOUNT_PRE;
-  color += noisePre;
 
   return color;
 }
@@ -140,12 +157,8 @@ void main() {
   // Grado de color "viejo CRT": desaturar un poco, calentar el blanco y
   // reducir la profundidad de color. El grano post disimula el bandeo.
   float luma = dot(color, vec3(0.299, 0.587, 0.114));
-  color = mix(vec3(luma), color, SATURATION);
-  color *= WHITE_TINT;
   color = floor(clamp(color, 0.0, 1.0) * COLOR_LEVELS + 0.5) / COLOR_LEVELS;
 
-  float noisePost = (rand(uv * 1.37 + fract(uTime) * 1.7) - 0.5) * NOISE_AMOUNT_POST;
-  color += noisePost;
 
   gl_FragColor = vec4(color, 1.0);
 }
