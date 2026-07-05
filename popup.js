@@ -32,7 +32,7 @@ function compileAndLink(gl, vertexSrc, fragmentSrc) {
   gl.shaderSource(vs, vertexSrc);
   gl.compileShader(vs);
   if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) {
-    return `Error interno en el vertex shader:\n${gl.getShaderInfoLog(vs)}`;
+    return `Internal error in the vertex shader:\n${gl.getShaderInfoLog(vs)}`;
   }
 
   const fs = gl.createShader(gl.FRAGMENT_SHADER);
@@ -56,7 +56,7 @@ async function validateShaderSource(source) {
   const vertexSrc = await loadVertexSrc();
   const canvas = document.createElement("canvas");
   const gl = canvas.getContext("webgl");
-  if (!gl) return "WebGL no disponible en este navegador.";
+  if (!gl) return "WebGL is not available in this browser.";
   return compileAndLink(gl, vertexSrc, source);
 }
 
@@ -85,7 +85,7 @@ async function persist(next) {
   chrome.tabs
     .sendMessage(tab.id, { type: "CRT_SET_SHADER", enabled: stored.crtEnabled, shader: stored.crtShader })
     .catch(() => {
-      // El content script puede no estar inyectado todavia (pestaña recien abierta).
+      // The content script may not be injected yet (freshly opened tab).
     });
 }
 
@@ -112,7 +112,7 @@ function renderCustomChannels(customShaders, crtEnabled, crtShader) {
     const del = document.createElement("span");
     del.className = "ch-delete";
     del.textContent = "×";
-    del.title = "Eliminar";
+    del.title = "Delete";
     del.addEventListener("click", (event) => {
       event.stopPropagation();
       deleteCustomShader(shader.id);
@@ -165,7 +165,7 @@ powerInput.addEventListener("change", async () => {
   const { crtShader = DEFAULT_SHADER } = await chrome.storage.local.get("crtShader");
   if (crtEnabled) {
     screenEl.classList.remove("powering-on");
-    void screenEl.offsetWidth; // reinicia la animacion si se togglea rapido
+    void screenEl.offsetWidth; // restarts the animation when toggled quickly
     screenEl.classList.add("powering-on");
   }
   persist({ crtEnabled, crtShader });
@@ -181,14 +181,14 @@ captureBtn.addEventListener("click", async () => {
   const { crtShader = DEFAULT_SHADER } = await chrome.storage.local.get("crtShader");
   const tab = await getActiveTab();
 
-  // Maximiza el video de la pestaña por CSS (no fullscreen nativo, que se
-  // capturaria negro) para que la captura sea casi todo video.
+  // Maximizes the tab's video via CSS (not native fullscreen, which would
+  // capture as black) so the capture is almost entirely video.
   if (tab?.id) {
     chrome.tabs.sendMessage(tab.id, { type: "CRT_MAXIMIZE_VIDEO", on: true }).catch(() => {});
   }
 
-  // tabCapture: captura la pestaña sin la barra "estás compartiendo" ni el
-  // selector. Si falla, el viewer cae al modo manual (getDisplayMedia).
+  // tabCapture: captures the tab without the "you are sharing" bar or the
+  // picker. If it fails, the viewer falls back to manual mode (getDisplayMedia).
   let streamId = null;
   try {
     if (tab?.id && chrome.tabCapture?.getMediaStreamId) {
@@ -200,11 +200,11 @@ captureBtn.addEventListener("click", async () => {
 
   let url = `${chrome.runtime.getURL("viewer.html")}?shader=${encodeURIComponent(crtShader)}`;
   if (streamId) url += `&streamId=${encodeURIComponent(streamId)}`;
-  if (tab?.id != null) url += `&srcTab=${tab.id}`; // para reenviarle teclado/click desde el viewer
-  // Ventana nueva (no pestaña): así es un target de alt-tab aparte y la podés
-  // poner en pantalla completa con F11 sin tocar la ventana de Crunchyroll.
-  // Estado "normal" (flotante, NO maximizada): si arranca maximizada, el F11
-  // no toma bien la captura.
+  if (tab?.id != null) url += `&srcTab=${tab.id}`; // so the viewer can forward keyboard/clicks to it
+  // New window (not a tab): that way it's a separate alt-tab target and you
+  // can put it in fullscreen with F11 without touching the Crunchyroll window.
+  // "normal" state (floating, NOT maximized): if it starts maximized, F11
+  // doesn't pick up the capture properly.
   await chrome.windows.create({ url, focused: true, state: "normal", width: 1280, height: 760 });
   window.close();
 });
@@ -217,11 +217,11 @@ customSaveBtn.addEventListener("click", async () => {
   const source = customSourceInput.value;
 
   if (!source.trim()) {
-    customErrorEl.textContent = "Pega el codigo del fragment shader.";
+    customErrorEl.textContent = "Paste the fragment shader code.";
     return;
   }
 
-  customErrorEl.textContent = "Validando...";
+  customErrorEl.textContent = "Validating...";
   const error = await validateShaderSource(source);
   if (error) {
     customErrorEl.textContent = error;

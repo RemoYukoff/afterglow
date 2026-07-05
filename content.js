@@ -34,7 +34,7 @@
         }
         const custom = (await getCustomShaders()).find((s) => s.id === shaderKey);
         if (custom) return custom.source;
-        console.warn(`[CRT] Shader "${shaderKey}" no encontrado, usando el default.`);
+        console.warn(`[CRT] Shader "${shaderKey}" not found, using the default.`);
         return fetch(SHADERS[DEFAULT_SHADER].url).then((r) => r.text());
       })();
       fragmentSrcCache.set(shaderKey, promise);
@@ -63,7 +63,7 @@
     gl.shaderSource(shader, source);
     gl.compileShader(shader);
     if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      console.error("[CRT] Error compilando shader:", gl.getShaderInfoLog(shader));
+      console.error("[CRT] Error compiling shader:", gl.getShaderInfoLog(shader));
       gl.deleteShader(shader);
       return null;
     }
@@ -80,7 +80,7 @@
     gl.attachShader(program, fragmentShader);
     gl.linkProgram(program);
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      console.error("[CRT] Error enlazando programa:", gl.getProgramInfoLog(program));
+      console.error("[CRT] Error linking program:", gl.getProgramInfoLog(program));
       return null;
     }
     return program;
@@ -97,11 +97,11 @@
     );
   }
 
-  // DRM (Widevine, etc.) suele hacer que el frame decodificado llegue como
-  // negro puro a cualquier lectura de pixeles, sin lanzar una excepcion de
-  // seguridad. Probamos con un canvas 2D chico, independiente de WebGL,
-  // para detectar esto antes de montar el overlay y quedarnos con un
-  // rectangulo negro pegado sobre el video.
+  // DRM (Widevine, etc.) usually makes the decoded frame come back as pure
+  // black to any pixel read, without throwing a security exception. We probe
+  // with a small 2D canvas, independent of WebGL, to detect this before
+  // mounting the overlay and ending up with a black rectangle stuck on top
+  // of the video.
   function readVideoSample(video) {
     const probe = document.createElement("canvas");
     probe.width = 4;
@@ -111,7 +111,7 @@
       ctx.drawImage(video, 0, 0, 4, 4);
       return ctx.getImageData(0, 0, 4, 4).data;
     } catch (err) {
-      return null; // canvas "tainted" (CORS o DRM)
+      return null; // canvas "tainted" (CORS or DRM)
     }
   }
 
@@ -154,7 +154,7 @@
 
     const gl = canvas.getContext("webgl", { preserveDrawingBuffer: false, antialias: false });
     if (!gl) {
-      console.error("[CRT] WebGL no disponible.");
+      console.error("[CRT] WebGL not available.");
       canvas.remove();
       return false;
     }
@@ -240,7 +240,7 @@
       gl.bindTexture(gl.TEXTURE_2D, texture);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
     } catch (err) {
-      console.warn("[CRT] No se pudo leer el frame de video (posible restricción de origen). Desactivando el shader.", err);
+      console.warn("[CRT] Could not read the video frame (possible cross-origin restriction). Disabling the shader.", err);
       teardown();
       return;
     }
@@ -270,7 +270,7 @@
     try {
       if (!(await canCaptureVideo(video))) {
         console.warn(
-          "[CRT] Este video parece protegido (DRM) y solo entrega frames negros al leerlo. Desactivando el efecto en esta pestaña."
+          "[CRT] This video appears to be protected (DRM) and only yields black frames when read. Disabling the effect in this tab."
         );
         state.enabled = false;
         return;
@@ -286,7 +286,7 @@
         renderFrame();
       }
     } catch (err) {
-      console.error("[CRT] No se pudieron cargar los shaders:", err);
+      console.error("[CRT] Failed to load the shaders:", err);
     } finally {
       activating = false;
     }
@@ -305,10 +305,10 @@
     activate();
   }
 
-  // Simula la tecla "f" (atajo de pantalla completa de Crunchyroll) sobre la
-  // página, para ver si el reproductor entra en fullscreen por sí solo. Nota:
-  // el navegador puede rechazar el requestFullscreen del player porque el
-  // evento es sintético (sin gesto real del usuario); esto es para probarlo.
+  // Simulates the "f" key (Crunchyroll's fullscreen shortcut) on the page,
+  // to see if the player enters fullscreen on its own. Note: the browser may
+  // reject the player's requestFullscreen because the event is synthetic
+  // (no real user gesture); this is here to try it out.
   function maximizeVideo(on) {
     if (!on) return;
     const init = { key: "f", code: "KeyF", keyCode: 70, which: 70, bubbles: true, cancelable: true, composed: true };
@@ -319,10 +319,10 @@
     }
   }
 
-  // Control remoto desde el viewer: reproduce en esta pagina el teclado/click
-  // que hace el usuario sobre la ventana DRM. Son eventos sinteticos
-  // (isTrusted:false), asi que sirven para los atajos del reproductor y el
-  // play/pausa, pero no para acciones que exijan un gesto real del usuario.
+  // Remote control from the viewer: replays on this page the keyboard/click
+  // input the user performs on the DRM window. These are synthetic events
+  // (isTrusted:false), so they work for player shortcuts and play/pause,
+  // but not for actions that require a real user gesture.
   function remoteControl(msg) {
     if (msg.kind === "key") {
       const init = {
@@ -348,7 +348,7 @@
         try {
           el.dispatchEvent(new Ctor(t, opts));
         } catch (_) {
-          /* algunos navegadores exigen campos extra en PointerEvent */
+          /* some browsers require extra fields in PointerEvent */
         }
       }
     }

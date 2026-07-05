@@ -1,5 +1,5 @@
-// Game Boy: pixelado fino, cuantizado a 6 tonos de verde DMG
-// con ordered dithering (matriz de Bayer generada algebraicamente).
+// Game Boy: fine pixelation, quantized to 6 DMG green tones
+// with ordered dithering (algebraically generated Bayer matrix).
 precision mediump float;
 
 varying vec2 vUv;

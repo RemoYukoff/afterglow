@@ -1,7 +1,7 @@
-// Virtual Boy: display de LEDs rojos sobre negro absoluto, 384x224. La
-// consola real barria una columna de 224 LEDs con un espejo oscilante;
-// aca queda la firma visual: monocromo rojo con niveles discretos de
-// brillo y el gap oscuro entre filas de LEDs.
+// Virtual Boy: red LED display over absolute black, 384x224. The real
+// console swept a column of 224 LEDs with an oscillating mirror; what
+// remains here is the visual signature: red monochrome with discrete
+// brightness levels and the dark gap between LED rows.
 precision mediump float;
 
 varying vec2 vUv;
@@ -17,11 +17,11 @@ void main() {
   vec3 src = texture2D(uVideo, (cell + 0.5) / VB_RES).rgb;
   float lum = dot(src, vec3(0.299, 0.587, 0.114));
 
-  // Niveles discretos de brillo (PWM de los LEDs), con una gamma corta
-  // para que los medios tonos no se pierdan en el negro.
+  // Discrete brightness levels (LED PWM), with a short gamma so the
+  // midtones do not get lost in the black.
   lum = floor(pow(lum, 0.85) * (LEVELS - 0.001)) / (LEVELS - 1.0);
 
-  // Filas de LEDs: gap vertical marcado; en horizontal apenas se insinua.
+  // LED rows: pronounced vertical gap; horizontally it is barely hinted.
   vec2 f = fract(vUv * VB_RES);
   float row = smoothstep(0.0, 0.22, f.y) * (1.0 - smoothstep(0.78, 1.0, f.y));
   float col = smoothstep(0.0, 0.08, f.x) * (1.0 - smoothstep(0.92, 1.0, f.x));

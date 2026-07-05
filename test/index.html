@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Shader tester — crt-tv</title>
+<title>Shader tester — Afterglow</title>
 <style>
   html, body { margin: 0; height: 100%; background: #101014; color: #ddd; font: 13px/1.4 system-ui, sans-serif; overflow: hidden; }
   #stage { position: absolute; inset: 0 0 34px 0; display: flex; align-items: center; justify-content: center; }
@@ -27,13 +27,13 @@
   <pre id="error"></pre>
   <div id="bar">
     <span id="shaders"></span>
-    <span class="hint">[1-9] shader · [espacio] pausa uTime · [O] original · guardá el .glsl y se recarga solo</span>
-    <span id="status">iniciando…</span>
+    <span class="hint">[1-9] shader · [space] pause uTime · [O] original · save the .glsl and it reloads automatically</span>
+    <span id="status">starting…</span>
   </div>
 
 <script>
 (() => {
-  // Shaders disponibles: los builtin + cualquier ?shader=nombre (sin .frag.glsl).
+  // Available shaders: the builtins + any ?shader=name (without .frag.glsl).
   const params = new URLSearchParams(location.search);
   const SHADERS = ["crt", "gameboy", "gbc", "virtualboy", "psx"];
   const extra = params.get("shader");
@@ -67,7 +67,7 @@
 
   async function fetchText(url) {
     const r = await fetch(url + "?t=" + Date.now(), { cache: "no-store" });
-    if (!r.ok) throw new Error(`${r.status} al pedir ${url}`);
+    if (!r.ok) throw new Error(`${r.status} fetching ${url}`);
     return r.text();
   }
 
@@ -83,16 +83,16 @@
     return s;
   }
 
-  // Recompila con las últimas fuentes. Si falla, deja el programa anterior
-  // en uso y muestra el log del compilador (con número de línea) arriba.
+  // Recompiles with the latest sources. If it fails, keeps the previous
+  // program in use and shows the compiler log (with line number) at the top.
   function rebuild() {
     let vs, fs;
     try {
       vs = compile(gl.VERTEX_SHADER, lastVertexSrc);
       fs = compile(gl.FRAGMENT_SHADER, lastFragSrc);
     } catch (err) {
-      setError(`Error compilando "${current}":\n${err.message}`);
-      setStatus("error de compilación — usando la última versión buena");
+      setError(`Error compiling "${current}":\n${err.message}`);
+      setStatus("compile error — using the last good version");
       return;
     }
     const prog = gl.createProgram();
@@ -100,7 +100,7 @@
     gl.attachShader(prog, fs);
     gl.linkProgram(prog);
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-      setError(`Error enlazando "${current}":\n${gl.getProgramInfoLog(prog)}`);
+      setError(`Error linking "${current}":\n${gl.getProgramInfoLog(prog)}`);
       return;
     }
     if (program) gl.deleteProgram(program);
@@ -112,10 +112,10 @@
     uTime = gl.getUniformLocation(program, "uTime");
     uResolution = gl.getUniformLocation(program, "uResolution");
     setError("");
-    setStatus(`"${current}" recargado ${new Date().toLocaleTimeString()}`, true);
+    setStatus(`"${current}" reloaded ${new Date().toLocaleTimeString()}`, true);
   }
 
-  // Poll: re-lee los .glsl del disco y recompila solo si cambió el texto.
+  // Poll: re-reads the .glsl files from disk and recompiles only if the text changed.
   async function poll() {
     try {
       const [v, f] = await Promise.all([fetchText(VERTEX_URL), fetchText(fragUrl(current))]);
@@ -125,13 +125,13 @@
         rebuild();
       }
     } catch (err) {
-      setStatus(`sin conexión con el server: ${err.message}`);
+      setStatus(`no connection to the server: ${err.message}`);
     }
   }
 
   function switchShader(key) {
     current = key;
-    lastFragSrc = null; // fuerza rebuild en el próximo poll
+    lastFragSrc = null; // forces a rebuild on the next poll
     document.querySelectorAll("#shaders button").forEach((b) =>
       b.classList.toggle("active", b.dataset.key === key)
     );
@@ -173,12 +173,12 @@
 
     gl = canvas.getContext("webgl", { antialias: false });
     if (!gl) {
-      setStatus("WebGL no disponible");
+      setStatus("WebGL not available");
       return;
     }
     gl.viewport(0, 0, canvas.width, canvas.height);
 
-    // Mismo setup que viewer.js: quad + textura con flip Y y clamp.
+    // Same setup as viewer.js: quad + texture with Y flip and clamp.
     const buf = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buf);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);

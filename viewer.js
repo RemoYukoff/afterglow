@@ -3,7 +3,7 @@
   const shaderKey = params.get("shader") || "crt";
   const srcTab = params.get("srcTab") ? parseInt(params.get("srcTab"), 10) : null;
 
-  // Reenvía input del viewer al tab del reproductor (control remoto).
+  // Forwards viewer input to the player tab (remote control).
   function remote(payload) {
     if (srcTab == null || !stream) return;
     chrome.tabs.sendMessage(srcTab, { type: "CRT_REMOTE", ...payload }).catch(() => {});
@@ -66,7 +66,7 @@
     gl.shaderSource(shader, source);
     gl.compileShader(shader);
     if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      console.error("[CRT viewer] Error compilando shader:", gl.getShaderInfoLog(shader));
+      console.error("[CRT viewer] Error compiling shader:", gl.getShaderInfoLog(shader));
       gl.deleteShader(shader);
       return null;
     }
@@ -82,20 +82,20 @@
     gl.attachShader(prog, fs);
     gl.linkProgram(prog);
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-      console.error("[CRT viewer] Error enlazando programa:", gl.getProgramInfoLog(prog));
+      console.error("[CRT viewer] Error linking program:", gl.getProgramInfoLog(prog));
       return null;
     }
     return prog;
   }
 
-  // Recompila y activa un shader en vivo, sin reiniciar la captura. El buffer de
-  // posición y la textura ya están creados/enlazados en setupGL, así que solo hay
-  // que rehacer el programa y re-apuntar el atributo/uniforms al programa nuevo.
+  // Recompiles and activates a shader live, without restarting the capture. The
+  // position buffer and the texture are already created/bound in setupGL, so we
+  // only need to rebuild the program and re-point the attribute/uniforms at it.
   async function applyShader(key) {
     const fragmentSrc = await loadFragmentSrc(key);
     const prog = createProgram(vertexSrc, fragmentSrc);
     if (!prog) {
-      setError(`No se pudo compilar el shader "${key}".`);
+      setError(`Could not compile shader "${key}".`);
       return false;
     }
     if (program) gl.deleteProgram(program);
@@ -118,7 +118,7 @@
 
   async function setupGL() {
     gl = canvas.getContext("webgl", { preserveDrawingBuffer: false, antialias: false });
-    if (!gl) throw new Error("WebGL no disponible en este navegador.");
+    if (!gl) throw new Error("WebGL is not available in this browser.");
 
     vertexSrc = await fetch(VERTEX_SHADER_URL).then((r) => r.text());
 
@@ -134,7 +134,7 @@
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
-    if (!(await applyShader(shaderKey))) throw new Error("No se pudo compilar el shader inicial.");
+    if (!(await applyShader(shaderKey))) throw new Error("Could not compile the initial shader.");
   }
 
   async function buildSwitcher() {
@@ -167,9 +167,10 @@
     });
   }
 
-  // La barra queda oculta mientras mirás; solo aparece al acercar el mouse al
-  // borde inferior (como los controles de un reproductor), así no molesta.
-  const REVEAL_ZONE = 110; // px desde abajo donde se revela
+  // The bar stays hidden while you watch; it only appears when you move the
+  // mouse near the bottom edge (like a player's controls), so it stays out
+  // of the way.
+  const REVEAL_ZONE = 110; // px from the bottom where it reveals
 
   function showBar() {
     if (switcherEl.hidden) return;
@@ -209,9 +210,9 @@
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 
-  // Chequeo por si la captura llega negra (algunas configs sí protegen la
-  // captura de la pestaña para DRM). Muestreamos el video capturado con un
-  // canvas 2D chico; si esta reproduciendo y sigue negro, avisamos.
+  // Check in case the capture comes back black (some configs do protect tab
+  // capture for DRM). We sample the captured video with a small 2D canvas;
+  // if it is playing and still black, we warn.
   function warnIfBlack() {
     const probe = document.createElement("canvas");
     probe.width = 8;
@@ -230,7 +231,7 @@
       if (black) {
         hud.hidden = false;
         hud.textContent =
-          "⚠ La captura llega negra: esta config protege la captura para este DRM. Probá compartir la PANTALLA en vez de la pestaña.";
+          "⚠ The capture is coming back black: this config protects capture for this DRM. Try sharing the SCREEN instead of the tab.";
       }
     } catch (_) {
       /* ignore */
@@ -243,7 +244,7 @@
     try {
       await video.play();
     } catch (_) {
-      /* autoplay de MediaStream muteado no debería fallar */
+      /* autoplay of a muted MediaStream should not fail */
     }
 
     try {
@@ -254,14 +255,15 @@
       return;
     }
 
-    // Si el tab capturado se cierra (o se detiene la captura), la pista termina.
-    // Cerramos esta ventana en vez de mostrar el panel: volver al panel llevaría
-    // al modo manual (getDisplayMedia), que sí muestra el banner de compartir.
+    // If the captured tab closes (or the capture stops), the track ends.
+    // We close this window instead of showing the panel: going back to the
+    // panel would lead to manual mode (getDisplayMedia), which does show the
+    // sharing banner.
     stream.getVideoTracks()[0].addEventListener("ended", () => window.close());
 
     startPanel.hidden = true;
     hud.hidden = false;
-    const FS_HINT = "F o F11 = pantalla completa";
+    const FS_HINT = "F or F11 = fullscreen";
     hud.textContent = FS_HINT;
     setTimeout(() => {
       if (hud.textContent === FS_HINT) hud.hidden = true;
@@ -271,12 +273,12 @@
     startTime = performance.now();
     renderFrame();
     showBar();
-    scheduleHide(2500); // un vistazo inicial y se esconde
+    scheduleHide(2500); // an initial peek, then it hides
     setTimeout(warnIfBlack, 1200);
   }
 
-  // Arranque directo (desde el popup): consume el streamId de tabCapture, sin
-  // la barra "estás compartiendo" ni el selector de fuente.
+  // Direct start (from the popup): consumes the tabCapture streamId, without
+  // the "you are sharing" bar or the source picker.
   async function startTab(streamId) {
     setError("");
     let s;
@@ -286,14 +288,14 @@
         video: { mandatory: { chromeMediaSource: "tab", chromeMediaSourceId: streamId } },
       });
     } catch (_) {
-      // Si el streamId no sirve, dejamos el panel para el modo manual.
-      setError('No se pudo usar la captura directa. Tocá "Iniciar captura" para elegir la fuente.');
+      // If the streamId is no good, leave the panel up for manual mode.
+      setError('Direct capture could not be used. Click "Start capture" to pick the source.');
       return;
     }
     await begin(s);
   }
 
-  // Fallback manual: selector de Chrome (muestra la barra de compartir).
+  // Manual fallback: Chrome's picker (shows the sharing bar).
   async function startDisplay() {
     setError("");
     let s;
@@ -305,8 +307,8 @@
     } catch (err) {
       setError(
         err && err.name === "NotAllowedError"
-          ? "Cancelaste la selección. Tocá de nuevo para elegir la fuente."
-          : `No se pudo iniciar la captura: ${err && err.message ? err.message : err}`
+          ? "You cancelled the selection. Click again to pick the source."
+          : `Could not start the capture: ${err && err.message ? err.message : err}`
       );
       return;
     }
@@ -322,7 +324,7 @@
     startPanel.hidden = false;
     hud.hidden = true;
     switcherEl.hidden = true;
-    setError("La captura terminó. Podés volver a iniciarla.");
+    setError("The capture ended. You can start it again.");
   }
 
   startBtn.addEventListener("click", startDisplay);
@@ -333,9 +335,9 @@
     else scheduleHide(500);
   });
 
-  // F = pantalla completa (Fullscreen API). También sirve F11 (nativa de la
-  // ventana). Importante: la ventana NO debe estar maximizada antes, o el
-  // reproductor puede quedar negro. Teclas 1-9 cambian de filtro.
+  // F = fullscreen (Fullscreen API). F11 (native to the window) also works.
+  // Important: the window must NOT be maximized beforehand, or the player
+  // may end up black. Keys 1-9 switch filters.
   document.addEventListener("keydown", (e) => {
     if (e.key === "f" || e.key === "F") {
       if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
@@ -344,7 +346,7 @@
       const chip = switcherEl.querySelectorAll(".chip")[parseInt(e.key, 10) - 1];
       if (chip) applyShader(chip.dataset.key);
     } else {
-      // Cualquier otra tecla (espacio, flechas, etc.) va al reproductor.
+      // Any other key (space, arrows, etc.) goes to the player.
       forwardKey("keydown", e);
     }
     showBar();
@@ -356,16 +358,16 @@
     forwardKey("keyup", e);
   });
 
-  // Click sobre el video -> click en la misma posición del reproductor
-  // (play/pausa). Mapeo por coordenadas normalizadas del canvas.
+  // Click on the video -> click at the same position on the player
+  // (play/pause). Mapped via normalized canvas coordinates.
   canvas.addEventListener("click", (e) => {
     const w = canvas.clientWidth || 1;
     const h = canvas.clientHeight || 1;
     remote({ kind: "click", u: e.offsetX / w, v: e.offsetY / h });
   });
 
-  // Arranque directo si el popup nos pasó un streamId de tabCapture (sin barra
-  // ni selector). Si no, queda el panel con el botón manual (getDisplayMedia).
+  // Direct start if the popup passed us a tabCapture streamId (no bar, no
+  // picker). Otherwise, the panel stays with the manual button (getDisplayMedia).
   const initialStreamId = params.get("streamId");
   if (initialStreamId) startTab(initialStreamId);
 })();

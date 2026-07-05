@@ -1,6 +1,6 @@
-// Mini servidor estático para el banco de pruebas de shaders.
-// Sirve la raíz del repo (para llegar a /shaders y /test.png) sin caché,
-// así el tester puede re-leer los .glsl del disco en cada poll.
+// Mini static server for the shader test bench.
+// Serves the repo root (to reach /shaders and /test.png) without caching,
+// so the tester can re-read the .glsl files from disk on every poll.
 //
 //   node test/server.js        → http://localhost:8123/test/
 //
@@ -38,7 +38,7 @@ const server = http.createServer((req, res) => {
     }
     res.writeHead(200, {
       "Content-Type": MIME[path.extname(filePath).toLowerCase()] || "application/octet-stream",
-      "Cache-Control": "no-store", // clave: los .glsl siempre frescos
+      "Cache-Control": "no-store", // key: the .glsl files are always fresh
     });
     res.end(data);
   });
@@ -47,8 +47,8 @@ const server = http.createServer((req, res) => {
 server.on("error", (err) => {
   if (err.code === "EADDRINUSE") {
     console.error(
-      `El puerto ${PORT} ya está en uso (¿otro server.js corriendo?).\n` +
-        `Cerrá el otro o usá otro puerto: PORT=8124 node test/server.js`
+      `Port ${PORT} is already in use (another server.js running?).\n` +
+        `Close the other one or use a different port: PORT=8124 node test/server.js`
     );
     process.exit(1);
   }

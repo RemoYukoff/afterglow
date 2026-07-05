@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "CRT Shader para video (prototipo)",
+  "name": "Afterglow",
   "version": "0.1.0",
-  "description": "Superpone un shader CRT en tiempo real sobre cualquier video de la pagina usando WebGL.",
+  "description": "Retro display filters for any video: CRT, Game Boy, Game Boy Color, Virtual Boy, and PS1 shaders rendered in real time with WebGL.",
   "permissions": ["activeTab", "storage", "tabCapture"],
   "action": {
     "default_popup": "popup.html"

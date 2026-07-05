@@ -1,0 +1,39 @@
+name: Build extension
+
+on:
+  push:
+    branches: [master, main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # only needed for the release step below, on tag pushes
+    steps:
+      - uses: actions/checkout@v4
+
+      # No build step: the extension is plain JS/GLSL. Package only the files
+      # Chrome needs, leaving out the dev test bench and repo housekeeping.
+      - name: Package extension zip
+        run: |
+          mkdir -p out
+          zip -r out/afterglow-extension.zip \
+            manifest.json content.js popup.html popup.js viewer.html viewer.js shaders
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: afterglow-extension
+          path: out/afterglow-extension.zip
+
+      # Sideload distribution (no Chrome Web Store submission): pushing a
+      # "vX.Y.Z" tag publishes the same zip as a GitHub Release asset, so it
+      # can be downloaded directly instead of digging through Actions runs.
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/afterglow-extension.zip
+          generate_release_notes: true

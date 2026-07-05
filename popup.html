@@ -482,7 +482,7 @@
           <div id="custom-channels"></div>
           <button class="channel-btn add-btn" id="add-shader-btn" type="button">
             <span class="ch-num">+</span>
-            <span class="ch-label">AGREGAR SHADER</span>
+            <span class="ch-label">ADD SHADER</span>
           </button>
         </div>
 
@@ -492,16 +492,16 @@
               <rect x="2" y="4" width="16" height="14" rx="2" />
               <path d="M22 8l-4 4 4 4" />
             </svg>
-            MODO CAPTURA (DRM)
+            CAPTURE MODE (DRM)
           </button>
           <p class="capture-sub">
-            Para videos con DRM (Crunchyroll). Maximiza el video, lo captura sin
-            barras y le aplica el shader en una ventana nueva.
+            For DRM-protected videos (Crunchyroll). Maximizes the video, captures
+            it without bars and applies the shader in a new window.
           </p>
         </div>
 
         <div class="custom-form" id="custom-form" hidden>
-          <input type="text" id="custom-name" placeholder="Nombre del shader" maxlength="24" />
+          <input type="text" id="custom-name" placeholder="Shader name" maxlength="24" />
           <textarea
             id="custom-source"
             spellcheck="false"
@@ -509,13 +509,13 @@
           ></textarea>
           <div class="custom-error" id="custom-error"></div>
           <div class="custom-actions">
-            <button type="button" id="custom-cancel">Cancelar</button>
-            <button type="button" id="custom-save" class="primary">Guardar</button>
+            <button type="button" id="custom-cancel">Cancel</button>
+            <button type="button" id="custom-save" class="primary">Save</button>
           </div>
         </div>
       </div>
     </div>
-    <p class="hint">Se aplica en el video de la pestaña activa</p>
+    <p class="hint">Applies to the video in the active tab</p>
     <script src="popup.js"></script>
   </body>
 </html>
