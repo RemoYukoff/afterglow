@@ -16,8 +16,10 @@
   const VERTEX_SHADER_URL = chrome.runtime.getURL("shaders/vertex.glsl");
   const BUILTIN = {
     crt: chrome.runtime.getURL("shaders/crt.frag.glsl"),
-    thermal: chrome.runtime.getURL("shaders/thermal.frag.glsl"),
     gameboy: chrome.runtime.getURL("shaders/gameboy.frag.glsl"),
+    gbc: chrome.runtime.getURL("shaders/gbc.frag.glsl"),
+    virtualboy: chrome.runtime.getURL("shaders/virtualboy.frag.glsl"),
+    psx: chrome.runtime.getURL("shaders/psx.frag.glsl"),
   };
 
   const canvas = document.getElementById("gl");
@@ -138,8 +140,10 @@
   async function buildSwitcher() {
     const builtins = [
       { key: "crt", label: "CRT" },
-      { key: "thermal", label: "Térmico" },
       { key: "gameboy", label: "Game Boy" },
+      { key: "gbc", label: "GB Color" },
+      { key: "virtualboy", label: "Virtual Boy" },
+      { key: "psx", label: "PS1" },
     ];
     const custom = (await getCustomShaders()).map((s) => ({ key: s.id, label: s.name }));
     const all = [...builtins, ...custom];

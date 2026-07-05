@@ -35,7 +35,7 @@
 (() => {
   // Shaders disponibles: los builtin + cualquier ?shader=nombre (sin .frag.glsl).
   const params = new URLSearchParams(location.search);
-  const SHADERS = ["crt", "thermal", "gameboy"];
+  const SHADERS = ["crt", "gameboy", "gbc", "virtualboy", "psx"];
   const extra = params.get("shader");
   if (extra && !SHADERS.includes(extra)) SHADERS.push(extra);
   let current = extra || "crt";

@@ -3,8 +3,10 @@
 
   const SHADERS = {
     crt: { url: chrome.runtime.getURL("shaders/crt.frag.glsl") },
-    thermal: { url: chrome.runtime.getURL("shaders/thermal.frag.glsl") },
     gameboy: { url: chrome.runtime.getURL("shaders/gameboy.frag.glsl") },
+    gbc: { url: chrome.runtime.getURL("shaders/gbc.frag.glsl") },
+    virtualboy: { url: chrome.runtime.getURL("shaders/virtualboy.frag.glsl") },
+    psx: { url: chrome.runtime.getURL("shaders/psx.frag.glsl") },
   };
   const DEFAULT_SHADER = "crt";
 

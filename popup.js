@@ -1,5 +1,5 @@
 const DEFAULT_SHADER = "crt";
-const BUILTIN_COUNT = 3;
+const BUILTIN_COUNT = 5;
 
 const screenEl = document.getElementById("screen");
 const powerInput = document.getElementById("power-input");
