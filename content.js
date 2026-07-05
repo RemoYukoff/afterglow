@@ -1,4 +1,9 @@
 (() => {
+  // Injected on demand via chrome.scripting (activeTab) every time the popup
+  // acts on a tab, so guard against running twice in the same page.
+  if (window.__afterglowInjected) return;
+  window.__afterglowInjected = true;
+
   const VERTEX_SHADER_URL = chrome.runtime.getURL("shaders/vertex.glsl");
 
   const SHADERS = {

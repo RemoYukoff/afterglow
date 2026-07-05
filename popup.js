@@ -75,6 +75,17 @@ async function getActiveTab() {
   return tab;
 }
 
+// The content script is injected on demand (activeTab + scripting) instead of
+// being declared for every site: it only ever runs on tabs where the user
+// invoked the extension. content.js guards itself against double injection.
+async function ensureInjected(tabId) {
+  try {
+    await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
+  } catch (_) {
+    // Pages where injection is not allowed (chrome://, Web Store, etc.).
+  }
+}
+
 async function persist(next) {
   await chrome.storage.local.set(next);
   const stored = await chrome.storage.local.get({ crtEnabled: false, crtShader: DEFAULT_SHADER });
@@ -82,11 +93,10 @@ async function persist(next) {
 
   const tab = await getActiveTab();
   if (!tab?.id) return;
+  await ensureInjected(tab.id);
   chrome.tabs
     .sendMessage(tab.id, { type: "CRT_SET_SHADER", enabled: stored.crtEnabled, shader: stored.crtShader })
-    .catch(() => {
-      // The content script may not be injected yet (freshly opened tab).
-    });
+    .catch(() => {});
 }
 
 function renderCustomChannels(customShaders, crtEnabled, crtShader) {
@@ -182,8 +192,10 @@ captureBtn.addEventListener("click", async () => {
   const tab = await getActiveTab();
 
   // Maximizes the tab's video via CSS (not native fullscreen, which would
-  // capture as black) so the capture is almost entirely video.
+  // capture as black) so the capture is almost entirely video. The content
+  // script also handles the viewer's remote control on this tab.
   if (tab?.id) {
+    await ensureInjected(tab.id);
     chrome.tabs.sendMessage(tab.id, { type: "CRT_MAXIMIZE_VIDEO", on: true }).catch(() => {});
   }
 
