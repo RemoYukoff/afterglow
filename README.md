@@ -82,3 +82,7 @@ Every push builds `afterglow-extension.zip` (extension files only) as an Actions
 ## Privacy
 
 Everything is local; nothing is collected or transmitted. See [PRIVACY.md](PRIVACY.md).
+
+## License
+
+[MIT](LICENSE)
