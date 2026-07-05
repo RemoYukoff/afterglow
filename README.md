@@ -54,7 +54,7 @@ src/                     the extension itself — Load unpacked points here
   viewer.html / viewer.js  capture-mode window
   shaders/               vertex.glsl + one fragment shader per filter
   icons/                 toolbar/store icons
-test/                    dev tooling (never shipped in the zip)
+tools/                   dev tooling (never shipped in the zip)
 store-assets/            Chrome Web Store listing screenshots
 .github/workflows/       CI: zip artifact, GitHub Release, Web Store publish
 ```
@@ -62,14 +62,14 @@ store-assets/            Chrome Web Store listing screenshots
 ## Development
 
 ```
-node test/server.js        # → http://localhost:8123/test/
+node tools/server.js       # → http://localhost:8123/tools/
 ```
 
-Zero-dependency static server + hot-reloading test bench: it re-reads `src/shaders/*.glsl` from disk every 400 ms and recompiles on change, keeping the last good program and surfacing the compiler log on errors. Drop any frame at `test/test.png` to test against.
+Zero-dependency static server + hot-reloading test bench: it re-reads `src/shaders/*.glsl` from disk every 400 ms and recompiles on change, keeping the last good program and surfacing the compiler log on errors. Drop any frame at `tools/sample.png` to test against.
 
 - `1-9` switch shaders · `space` freezes `uTime` · `O` overlays the original
 - `?shader=name` adds any extra shader file as a channel
-- `test/promo.html?shader=name` regenerates the 1280×800 store screenshots from a procedural test card
+- `tools/promo.html?shader=name` regenerates the 1280×800 store screenshots from a procedural test card, and `tools/logo.html` regenerates the icon set
 
 To run the extension itself: `chrome://extensions` → Developer mode → **Load unpacked** → select the `src/` folder. Shader edits need an extension reload; UI/JS edits too. That's why the test bench exists — iterate there, reload once.
 

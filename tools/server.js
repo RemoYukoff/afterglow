@@ -1,8 +1,8 @@
-// Mini static server for the shader test bench.
-// Serves the repo root (to reach /shaders and /test.png) without caching,
-// so the tester can re-read the .glsl files from disk on every poll.
+// Mini static server for the dev tools (shader bench, promo/logo generators).
+// Serves the repo root (to reach /src/shaders and /tools/sample.png) without
+// caching, so the bench can re-read the .glsl files from disk on every poll.
 //
-//   node test/server.js        → http://localhost:8123/test/
+//   node tools/server.js        → http://localhost:8123/tools/
 //
 const http = require("node:http");
 const fs = require("node:fs");
@@ -48,7 +48,7 @@ server.on("error", (err) => {
   if (err.code === "EADDRINUSE") {
     console.error(
       `Port ${PORT} is already in use (another server.js running?).\n` +
-        `Close the other one or use a different port: PORT=8124 node test/server.js`
+        `Close the other one or use a different port: PORT=8124 node tools/server.js`
     );
     process.exit(1);
   }
@@ -56,5 +56,5 @@ server.on("error", (err) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Shader tester: http://localhost:${PORT}/test/`);
+  console.log(`Shader tester: http://localhost:${PORT}/tools/`);
 });
