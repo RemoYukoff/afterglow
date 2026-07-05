@@ -61,6 +61,7 @@
     resizeObserver: null,
     bodyObserver: null,
     startTime: null,
+    drmRecheck: null,
   };
 
   function compileShader(gl, type, source) {
@@ -263,7 +264,35 @@
     if (state.rafId) cancelAnimationFrame(state.rafId);
     if (state.resizeObserver) state.resizeObserver.disconnect();
     if (state.canvas) state.canvas.remove();
-    state = { ...state, video: null, canvas: null, gl: null, program: null, texture: null, rafId: null, resizeObserver: null };
+    if (state.drmRecheck && state.video) state.video.removeEventListener("playing", state.drmRecheck);
+    state = { ...state, video: null, canvas: null, gl: null, program: null, texture: null, rafId: null, resizeObserver: null, drmRecheck: null };
+  }
+
+  // Deferred DRM check. If the effect is enabled while the video is paused,
+  // the pre-mount probe cannot tell a protected frame from a legitimately
+  // black one (nothing advances, both read as black), so the overlay mounts
+  // with the benefit of the doubt. This re-probes shortly after playback
+  // starts: still black while time advances means DRM, so tear down and
+  // disable in this tab. One readable sample removes the listener for good.
+  function armDrmRecheck(video) {
+    const onPlaying = () => {
+      const startTime = video.currentTime;
+      setTimeout(() => {
+        if (!state.canvas || state.video !== video) return;
+        if (video.paused || video.currentTime <= startTime) return; // no signal yet; retry on next "playing"
+        state.drmRecheck = null;
+        video.removeEventListener("playing", onPlaying);
+        if (isSampleBlack(readVideoSample(video))) {
+          console.warn(
+            "[CRT] This video appears to be protected (DRM) and only yields black frames when read. Disabling the effect in this tab."
+          );
+          state.enabled = false;
+          teardown();
+        }
+      }, 700);
+    };
+    state.drmRecheck = onPlaying;
+    video.addEventListener("playing", onPlaying);
   }
 
   async function activate() {
@@ -289,6 +318,7 @@
       if (!state.enabled || state.canvas) return;
       if (setupOverlay(video, vertexSrc, fragmentSrc)) {
         renderFrame();
+        armDrmRecheck(video);
       }
     } catch (err) {
       console.error("[CRT] Failed to load the shaders:", err);
