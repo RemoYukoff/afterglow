@@ -31,7 +31,8 @@ jobs:
         run: |
           mkdir -p out
           zip -r out/afterglow-extension.zip \
-            manifest.json content.js popup.html popup.js viewer.html viewer.js shaders
+            manifest.json content.js popup.html popup.js viewer.html viewer.js shaders icons \
+            -x "icons/icon512.png"
 
       - uses: actions/upload-artifact@v4
         with:
