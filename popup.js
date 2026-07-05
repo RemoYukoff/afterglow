@@ -86,6 +86,28 @@ async function ensureInjected(tabId) {
   }
 }
 
+// If the tab's video is DRM-protected, gray out the filter controls and
+// point the user straight at Capture Mode, instead of letting them enable
+// an effect that can only render black.
+async function probeDrm() {
+  const tab = await getActiveTab();
+  if (!tab?.id) return;
+  await ensureInjected(tab.id);
+  let res = null;
+  try {
+    res = await chrome.tabs.sendMessage(tab.id, { type: "CRT_PROBE" });
+  } catch (_) {
+    return; // no content script here (chrome:// etc.); leave the popup as-is
+  }
+  if (!res?.drm) return;
+  powerInput.checked = false;
+  powerInput.disabled = true;
+  statusText.textContent = "DRM SIGNAL";
+  statusText.classList.remove("on");
+  channelsEl.classList.add("disabled");
+  document.getElementById("drm-note").hidden = false;
+}
+
 async function persist(next) {
   await chrome.storage.local.set(next);
   const stored = await chrome.storage.local.get({ crtEnabled: false, crtShader: DEFAULT_SHADER });
@@ -250,3 +272,4 @@ customSaveBtn.addEventListener("click", async () => {
 });
 
 refresh();
+probeDrm();

@@ -18,6 +18,10 @@
   let vertexSrcPromise = null;
   const fragmentSrcCache = new Map();
   let activating = false;
+  // Sticky per-page flag: once a video is confirmed DRM-protected (by the
+  // pre-mount probe or the deferred recheck), the popup shows this tab as
+  // blocked and points the user at Capture Mode instead.
+  let drmDetected = false;
 
   function loadVertexSrc() {
     if (!vertexSrcPromise) {
@@ -286,6 +290,7 @@
           console.warn(
             "[CRT] This video appears to be protected (DRM) and only yields black frames when read. Disabling the effect in this tab."
           );
+          drmDetected = true;
           state.enabled = false;
           teardown();
         }
@@ -306,6 +311,7 @@
         console.warn(
           "[CRT] This video appears to be protected (DRM) and only yields black frames when read. Disabling the effect in this tab."
         );
+        drmDetected = true;
         state.enabled = false;
         return;
       }
@@ -389,13 +395,31 @@
     }
   }
 
-  chrome.runtime.onMessage.addListener((message) => {
+  // Answers the popup: is there a video here, and is it DRM-protected?
+  // Confident "drm: true" only — a paused black video is indistinguishable
+  // from a protected one, so it reports capturable and the deferred
+  // recheck settles it once playback starts.
+  async function probeForPopup() {
+    const video = findVideo();
+    if (!video) return { hasVideo: false, drm: false };
+    if (drmDetected) return { hasVideo: true, drm: true };
+    if (video.readyState >= 2 && !(await canCaptureVideo(video))) {
+      drmDetected = true;
+      return { hasVideo: true, drm: true };
+    }
+    return { hasVideo: true, drm: false };
+  }
+
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type === "CRT_SET_SHADER") {
       applySettings(message.enabled, message.shader);
     } else if (message?.type === "CRT_MAXIMIZE_VIDEO") {
       maximizeVideo(!!message.on);
     } else if (message?.type === "CRT_REMOTE") {
       remoteControl(message);
+    } else if (message?.type === "CRT_PROBE") {
+      probeForPopup().then(sendResponse);
+      return true; // async sendResponse
     }
   });
 
