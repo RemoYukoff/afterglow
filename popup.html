@@ -388,14 +388,6 @@
         background: rgba(77, 255, 176, 0.12);
       }
 
-      .hint {
-        margin: 10px 2px 0;
-        font-size: 10px;
-        color: #7a7780;
-        letter-spacing: 0.02em;
-        line-height: 1.4;
-      }
-
       .capture-row {
         position: relative;
         z-index: 1;
@@ -433,13 +425,6 @@
         stroke: currentColor;
         fill: none;
         stroke-width: 2;
-      }
-
-      .capture-sub {
-        margin: 6px 2px 0;
-        font-size: 10px;
-        color: #6b7c74;
-        line-height: 1.4;
       }
 
     </style>
@@ -508,10 +493,6 @@
             </svg>
             CAPTURE MODE (DRM)
           </button>
-          <p class="capture-sub">
-            For DRM-protected videos (Crunchyroll). Maximizes the video, captures
-            it without bars and applies the shader in a new window.
-          </p>
         </div>
 
         <div class="custom-form" id="custom-form" hidden>
@@ -529,7 +510,6 @@
         </div>
       </div>
     </div>
-    <p class="hint">Applies to the video in the active tab</p>
     <script src="popup.js"></script>
   </body>
 </html>
