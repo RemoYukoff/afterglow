@@ -15,6 +15,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # On tag pushes, stamp the manifest version from the tag (v1.2.3 -> 1.2.3)
+      # so the Chrome Web Store always receives an increasing version without
+      # hand-editing manifest.json.
+      - name: Stamp version from tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          jq --arg v "$V" '.version = $v' manifest.json > manifest.tmp
+          mv manifest.tmp manifest.json
+
       # No build step: the extension is plain JS/GLSL. Package only the files
       # Chrome needs, leaving out the dev test bench and repo housekeeping.
       - name: Package extension zip
@@ -28,12 +38,31 @@ jobs:
           name: afterglow-extension
           path: out/afterglow-extension.zip
 
-      # Sideload distribution (no Chrome Web Store submission): pushing a
-      # "vX.Y.Z" tag publishes the same zip as a GitHub Release asset, so it
-      # can be downloaded directly instead of digging through Actions runs.
+      # Sideload distribution: pushing a "vX.Y.Z" tag publishes the same zip
+      # as a GitHub Release asset, so it can be downloaded directly.
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: out/afterglow-extension.zip
           generate_release_notes: true
+
+      # Chrome Web Store publish: uploads the zip and submits it for review.
+      # Needs four repo secrets (see README section "Store publishing"):
+      #   CHROME_EXTENSION_ID, CHROME_CLIENT_ID, CHROME_CLIENT_SECRET,
+      #   CHROME_REFRESH_TOKEN
+      # Skips gracefully while they are not configured.
+      - name: Publish to Chrome Web Store
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+          CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+        run: |
+          if [ -z "$EXTENSION_ID" ]; then
+            echo "Chrome Web Store secrets not configured; skipping store publish."
+            exit 0
+          fi
+          npx --yes chrome-webstore-upload-cli@3 upload \
+            --source out/afterglow-extension.zip --auto-publish
