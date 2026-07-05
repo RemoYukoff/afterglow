@@ -1,55 +1,84 @@
 # Afterglow
 
-Retro display filters for any video in your browser: CRT, Game Boy, Game Boy Color, Virtual Boy, and PS1, rendered locally in real time with WebGL.
+Chrome extension (Manifest V3) that renders any `<video>` element through retro display shaders — CRT, Game Boy, Game Boy Color, Virtual Boy, PS1 — in real time with WebGL 1. No build step, no dependencies: plain JS, HTML, and GLSL ES 1.00.
 
 ![Afterglow CRT filter](store-assets/screenshot-1-crt.jpg)
 
-## Filters
+## Architecture
 
-- **CRT** — a physically modeled tube, not an overlay texture: real scanlines drawn by a Gaussian beam that blooms with brightness, a Trinitron-style aperture grille fixed to the glass, composite chroma bleed and delay, halation, radial misconvergence, edge defocus, barrel curvature, overscan, and warm consumer phosphors. Every parameter is a documented constant at the top of [`shaders/crt.frag.glsl`](shaders/crt.frag.glsl).
-- **Game Boy** — 6 shades of DMG green with ordered (Bayer) dithering.
-- **Game Boy Color** — RGB555 color through an unlit reflective TFT: washed blacks, muted tones, visible pixel grid, hardware-style point sampling.
-- **Virtual Boy** — 384×224 red LEDs on absolute black, discrete brightness levels, LED row gaps.
-- **PS1** — 320×240, 15-bit color, and the GPU's characteristic checkerboard dithering.
+Two rendering paths share the same shaders and uniform contract:
 
-Custom shaders are supported too: paste any GLSL fragment shader in the popup and it becomes a new channel. Shaders receive `uVideo` (sampler2D), `uTime` (float), `uResolution` (vec2), and `vUv` (vec2).
+**Overlay path** (`content.js`) — for players that allow pixel reads. The popup injects `content.js` into the active tab via `chrome.scripting` + `activeTab` (there are no declared content scripts and no host permissions; the script only ever runs on tabs where the user invoked the extension, and guards against double injection). It finds the main `<video>`, mounts an absolutely-positioned WebGL canvas over it (`pointer-events: none`, tracked with a `ResizeObserver`), uploads the current frame with `texImage2D(video)` every rAF, and draws a fullscreen quad through the selected fragment shader.
 
-## How it works
+**Capture path** (`viewer.html` / `viewer.js`) — for DRM players whose frames read back black. The popup requests a `tabCapture` stream id and opens the viewer in a new window, which consumes the stream via `getUserMedia({ chromeMediaSource: "tab" })` and renders it through the same pipeline. Keyboard and clicks on the viewer are forwarded back to the player tab as synthetic events (`CRT_REMOTE` messages → content script replays them), so player shortcuts keep working. Falls back to `getDisplayMedia` if the stream id is rejected.
 
-On regular players (YouTube and most sites), the popup injects a content script — only into the tab you invoked it on (`activeTab` + `scripting`, no broad host permissions) — which mounts a WebGL canvas over the video and renders it through the selected shader.
+### DRM detection
 
-Players that protect their frames (DRM) yield only black pixels to any read. Afterglow detects this (including the tricky enable-while-paused case, which is re-checked once playback starts) and points you to **Capture Mode**: a dedicated viewer window that captures the tab and applies the filter there, forwarding your keyboard and clicks back to the player so space, arrows, and fullscreen keep working. Audio stays in the original tab.
+DRM frames read as pure black without throwing, so detection is heuristic (`content.js`):
 
-Everything runs locally. Nothing is recorded, stored, or transmitted — see [PRIVACY.md](PRIVACY.md).
+1. **Pre-mount probe** — draw the video into a 4×4 2D canvas; if pixels are black, wait 700 ms and re-sample. Black *while `currentTime` advances* ⇒ DRM, don't mount.
+2. **Deferred recheck** — enabling the filter on a *paused* protected video is undetectable (a paused black frame and a protected frame are byte-identical), so the overlay mounts and a self-removing `playing` listener re-probes ~700 ms into playback, tearing down if frames are still unreadable.
+3. The result is sticky per page (`drmDetected`). The popup asks for it on open (`CRT_PROBE`) and, when true, disables the filter controls and points at Capture Mode.
 
-## Install
+### Message protocol
 
-**From source (developer mode):**
+| Message | Direction | Purpose |
+|---|---|---|
+| `CRT_SET_SHADER` | popup → content | enable/disable + shader key |
+| `CRT_PROBE` | popup → content | `{ hasVideo, drm }` for the popup UI |
+| `CRT_MAXIMIZE_VIDEO` | popup → content | nudge the player toward fullscreen before capture |
+| `CRT_REMOTE` | viewer → content | replay keyboard/clicks on the player tab |
 
-1. Clone this repo.
-2. Open `chrome://extensions`, enable **Developer mode**.
-3. **Load unpacked** → select the repo folder.
+### Shader contract
 
-**From a release:** download `afterglow-extension.zip` from the latest [Release](../../releases), unzip it, and load the folder the same way.
+Fragment shaders are standalone GLSL ES 1.00 files in `shaders/`, hot-swappable at runtime:
+
+```glsl
+varying vec2 vUv;            // 0..1 quad coordinates
+uniform sampler2D uVideo;    // current video frame (CLAMP_TO_EDGE, LINEAR)
+uniform float uTime;         // seconds since activation
+uniform vec2 uResolution;    // canvas size in px (matches video resolution)
+```
+
+User-defined shaders (popup → "ADD SHADER") are validated by compiling against a throwaway WebGL context before being stored in `chrome.storage.local`.
+
+The CRT shader is the deep one: virtual low-res scanline source, brightness-dependent Gaussian beam, bandwidth-limited luma with delayed wide chroma, aperture grille fixed to `gl_FragCoord`, halation, radial misconvergence, edge defocus, curvature/overscan/vignette. Every parameter is a documented constant at the top of [`shaders/crt.frag.glsl`](shaders/crt.frag.glsl) — tune and hot-reload.
+
+## Repo layout
+
+```
+manifest.json          MV3, permissions: activeTab, scripting, storage, tabCapture
+content.js             overlay path + DRM heuristics + remote-control replay
+popup.html / popup.js  TV-styled UI, on-demand injection, custom shader editor
+viewer.html / viewer.js  capture-mode window
+shaders/               vertex.glsl + one fragment shader per filter
+test/                  dev tooling (never shipped in the zip)
+store-assets/          Chrome Web Store listing screenshots
+.github/workflows/     CI: zip artifact, GitHub Release, Web Store publish
+```
 
 ## Development
 
-The repo ships a hot-reloading shader test bench so you can edit `.glsl` files and see the result instantly, without reloading the extension:
-
 ```
-node test/server.js
+node test/server.js        # → http://localhost:8123/test/
 ```
 
-Then open `http://localhost:8123/test/`. Put any frame you want to test against at `test/test.png`. The page re-reads the shaders from disk every 400 ms: save a file and it recompiles live, keeping the last good version (and showing the compiler log) on errors.
+Zero-dependency static server + hot-reloading test bench: it re-reads `shaders/*.glsl` from disk every 400 ms and recompiles on change, keeping the last good program and surfacing the compiler log on errors. Drop any frame at `test/test.png` to test against.
 
-- Keys `1-9` switch shaders, `space` freezes `uTime`, `O` overlays the original image.
-- `?shader=name` adds any extra shader from `shaders/` as a channel.
-- `test/promo.html?shader=name` renders the store screenshots (procedural test card, exact 1280×800).
+- `1-9` switch shaders · `space` freezes `uTime` · `O` overlays the original
+- `?shader=name` adds any extra shader file as a channel
+- `test/promo.html?shader=name` regenerates the 1280×800 store screenshots from a procedural test card
 
-## Releases
+To run the extension itself: `chrome://extensions` → Developer mode → **Load unpacked** → repo root. Shader edits need an extension reload; UI/JS edits too. That's why the test bench exists — iterate there, reload once.
 
-CI packages the extension zip as an artifact on every push. Pushing a `vX.Y.Z` tag stamps that version into the manifest, attaches the zip to a GitHub Release, and — when the `CHROME_*` secrets are configured — submits it to the Chrome Web Store automatically. See [`.github/workflows/build.yml`](.github/workflows/build.yml).
+## Release flow
 
-## Credits
+Every push builds `afterglow-extension.zip` (extension files only) as an Actions artifact. Pushing a `vX.Y.Z` tag additionally:
 
-The CRT shader is inspired by Timothy Lottes' public-domain [crt-lottes](https://github.com/libretro/glsl-shaders/blob/master/crt/shaders/crt-lottes-fast.glsl), rebuilt around how the actual hardware behaves.
+1. stamps `X.Y.Z` into `manifest.json`,
+2. attaches the zip to a GitHub Release,
+3. uploads + submits to the Chrome Web Store via `chrome-webstore-upload-cli`, if the `CHROME_EXTENSION_ID` / `CHROME_CLIENT_ID` / `CHROME_CLIENT_SECRET` / `CHROME_REFRESH_TOKEN` secrets are set (skips gracefully otherwise).
+
+## Privacy
+
+Everything is local; nothing is collected or transmitted. See [PRIVACY.md](PRIVACY.md).

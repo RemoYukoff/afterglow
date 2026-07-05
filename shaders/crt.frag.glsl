@@ -1,5 +1,4 @@
-// Realistic single-pass CRT, inspired by Timothy Lottes' "crt-lottes"
-// (public domain) and by how the real hardware works:
+// Realistic single-pass CRT, modeled on how the real hardware works:
 //  - the image is resampled to a low-resolution virtual source
 //    (SRC_LINES scanlines, like a real NTSC/PAL signal)
 //  - each line is drawn with a Gaussian beam whose thickness depends on
