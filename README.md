@@ -55,7 +55,7 @@ src/                     the extension itself — Load unpacked points here
   shaders/               vertex.glsl + one fragment shader per filter
   icons/                 toolbar/store icons
 test/                    dev tooling (never shipped in the zip)
-store-assets/            Chrome Web Store listing screenshots + 512px icon
+store-assets/            Chrome Web Store listing screenshots
 .github/workflows/       CI: zip artifact, GitHub Release, Web Store publish
 ```
 
