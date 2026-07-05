@@ -1,9 +1,9 @@
 // Game Boy Color: pixel gordo con color RGB555 (5 bits por canal, la
 // paleta fisica de la consola) y pantalla TFT reflectiva sin backlight:
 // negros lavados, colores apagados con tinte verdoso y la rejilla de
-// pixeles bien visible. La grilla usa mas lineas que las 144 reales y
-// promedia el area de cada celda (filtro de caja): con muestreo puntual
-// a 144 lineas el texto del video se vuelve ilegible.
+// pixeles bien visible. La grilla usa mas lineas que las 144 reales
+// (con 144 el texto del video es ilegible) pero conserva el muestreo
+// puntual del hardware: pixeles discretos, sin interpolar.
 precision mediump float;
 
 varying vec2 vUv;
@@ -17,14 +17,11 @@ void main() {
   vec2 res = vec2(GBC_LINES * uResolution.x / uResolution.y, GBC_LINES);
   vec2 cell = floor(vUv * res);
 
-  // Filtro de caja: 4 muestras en los cuartos de la celda. Un trazo fino
-  // siempre cae cerca de alguna, en vez de existir solo si pasa por el centro.
-  vec2 base = (cell + 0.5) / res;
-  vec2 q = 0.25 / res;
-  vec3 color = 0.25 * (texture2D(uVideo, base + q).rgb
-                     + texture2D(uVideo, base - q).rgb
-                     + texture2D(uVideo, base + vec2(q.x, -q.y)).rgb
-                     + texture2D(uVideo, base + vec2(-q.x, q.y)).rgb);
+  // Muestreo puntual (nearest-neighbor), como el hardware real: el LCD
+  // mostraba su framebuffer pixel a pixel, discreto y sin interpolar.
+  // El precio con video de alta resolucion es algo de shimmering en
+  // movimiento; es parte del caracter elegido.
+  vec3 color = texture2D(uVideo, (cell + 0.5) / res).rgb;
 
   // RGB555: 32 niveles por canal, todo lo que la consola podia mostrar.
   color = floor(color * 31.0 + 0.5) / 31.0;
