@@ -7,11 +7,11 @@
   const VERTEX_SHADER_URL = chrome.runtime.getURL("shaders/vertex.glsl");
 
   const SHADERS = {
-    crt: { url: chrome.runtime.getURL("shaders/crt.frag.glsl") },
-    gameboy: { url: chrome.runtime.getURL("shaders/gameboy.frag.glsl") },
-    gbc: { url: chrome.runtime.getURL("shaders/gbc.frag.glsl") },
-    virtualboy: { url: chrome.runtime.getURL("shaders/virtualboy.frag.glsl") },
-    psx: { url: chrome.runtime.getURL("shaders/psx.frag.glsl") },
+    crt: chrome.runtime.getURL("shaders/crt.frag.glsl"),
+    gameboy: chrome.runtime.getURL("shaders/gameboy.frag.glsl"),
+    gbc: chrome.runtime.getURL("shaders/gbc.frag.glsl"),
+    virtualboy: chrome.runtime.getURL("shaders/virtualboy.frag.glsl"),
+    psx: chrome.runtime.getURL("shaders/psx.frag.glsl"),
   };
   const DEFAULT_SHADER = "crt";
 
@@ -39,12 +39,12 @@
     if (!fragmentSrcCache.has(shaderKey)) {
       const promise = (async () => {
         if (SHADERS[shaderKey]) {
-          return fetch(SHADERS[shaderKey].url).then((r) => r.text());
+          return fetch(SHADERS[shaderKey]).then((r) => r.text());
         }
         const custom = (await getCustomShaders()).find((s) => s.id === shaderKey);
         if (custom) return custom.source;
         console.warn(`[CRT] Shader "${shaderKey}" not found, using the default.`);
-        return fetch(SHADERS[DEFAULT_SHADER].url).then((r) => r.text());
+        return fetch(SHADERS[DEFAULT_SHADER]).then((r) => r.text());
       })();
       fragmentSrcCache.set(shaderKey, promise);
     }
@@ -350,8 +350,7 @@
   // to see if the player enters fullscreen on its own. Note: the browser may
   // reject the player's requestFullscreen because the event is synthetic
   // (no real user gesture); this is here to try it out.
-  function maximizeVideo(on) {
-    if (!on) return;
+  function maximizeVideo() {
     const init = { key: "f", code: "KeyF", keyCode: 70, which: 70, bubbles: true, cancelable: true, composed: true };
     const video = findVideo();
     for (const target of [document, video, document.body].filter(Boolean)) {
@@ -377,7 +376,7 @@
       };
       const video = findVideo();
       for (const target of [document, video].filter(Boolean)) {
-        target.dispatchEvent(new KeyboardEvent(msg.evtype || "keydown", init));
+        target.dispatchEvent(new KeyboardEvent(msg.evtype, init));
       }
     } else if (msg.kind === "click") {
       const x = Math.round((msg.u || 0) * window.innerWidth);
@@ -414,7 +413,7 @@
     if (message?.type === "CRT_SET_SHADER") {
       applySettings(message.enabled, message.shader);
     } else if (message?.type === "CRT_MAXIMIZE_VIDEO") {
-      maximizeVideo(!!message.on);
+      maximizeVideo();
     } else if (message?.type === "CRT_REMOTE") {
       remoteControl(message);
     } else if (message?.type === "CRT_PROBE") {

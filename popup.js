@@ -213,12 +213,12 @@ captureBtn.addEventListener("click", async () => {
   const { crtShader = DEFAULT_SHADER } = await chrome.storage.local.get("crtShader");
   const tab = await getActiveTab();
 
-  // Maximizes the tab's video via CSS (not native fullscreen, which would
-  // capture as black) so the capture is almost entirely video. The content
-  // script also handles the viewer's remote control on this tab.
+  // Asks the page's player to go fullscreen (simulated "f" key) so the
+  // capture is almost entirely video. The content script also handles the
+  // viewer's remote control on this tab.
   if (tab?.id) {
     await ensureInjected(tab.id);
-    chrome.tabs.sendMessage(tab.id, { type: "CRT_MAXIMIZE_VIDEO", on: true }).catch(() => {});
+    chrome.tabs.sendMessage(tab.id, { type: "CRT_MAXIMIZE_VIDEO" }).catch(() => {});
   }
 
   // tabCapture: captures the tab without the "you are sharing" bar or the

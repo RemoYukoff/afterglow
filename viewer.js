@@ -315,16 +315,12 @@
     await begin(s);
   }
 
+  // Only reachable when setupGL fails right after the capture starts, so the
+  // start panel is still visible and the caller has already set the error.
   function stopStream() {
-    if (rafId) cancelAnimationFrame(rafId);
-    rafId = null;
     if (stream) stream.getTracks().forEach((t) => t.stop());
     stream = null;
     video.srcObject = null;
-    startPanel.hidden = false;
-    hud.hidden = true;
-    switcherEl.hidden = true;
-    setError("The capture ended. You can start it again.");
   }
 
   startBtn.addEventListener("click", startDisplay);
