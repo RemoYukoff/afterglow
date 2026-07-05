@@ -1,6 +1,14 @@
-// CRT post-effect inspired by Timothy Lottes' public-domain "crt-lottes" shader
-// (https://github.com/libretro/glsl-shaders/blob/master/crt/shaders/crt-lottes-fast.glsl),
-// adapted for arbitrary video content instead of low-res pixel art.
+// CRT realista en un solo pase, inspirado en el "crt-lottes" de Timothy
+// Lottes (dominio publico) y en como funciona el hardware de verdad:
+//  - la imagen se re-muestrea a una fuente virtual de baja resolucion
+//    (SRC_LINES lineas de escaneo, como una senal NTSC/PAL real)
+//  - cada linea se dibuja con un haz gaussiano cuyo grosor depende del
+//    brillo: las zonas claras "engordan" y rellenan el gap entre lineas
+//  - la senal tiene ancho de banda limitado: la luma se filtra poco y el
+//    croma mucho (el sangrado de color de una entrada composite)
+//  - la mascara de ranuras (slot mask) esta fija al vidrio, no a la imagen
+//  - desconvergencia radial, halation del vidrio, vineta, curvatura y
+//    esquinas redondeadas del tubo
 precision highp float;
 
 varying vec2 vUv;
@@ -8,31 +16,31 @@ uniform sampler2D uVideo;
 uniform float uTime;
 uniform vec2 uResolution;
 
+// ---- fuente virtual --------------------------------------------------------
+const float SRC_LINES = 400.0;   // lineas de escaneo visibles (NTSC ~480; menos = mas marcadas)
+const float H_SOFT = 0.7;        // suavizado horizontal de la senal, en px virtuales
+const float CHROMA_SPREAD = 2.2; // radio del filtrado del croma, en px virtuales
+const float CHROMA_BLEED = 0.75; // cuanto del croma viene de la version borrosa
+
+// ---- haz -------------------------------------------------------------------
+// Sigma del perfil gaussiano del haz, en unidades de linea. El grosor crece
+// con el brillo del canal: es el "bloom" caracteristico del CRT, y hace que
+// las scanlines se noten en zonas oscuras y casi desaparezcan en las claras.
+const float BEAM_MIN = 0.24;
+const float BEAM_MAX = 0.5;
+
+// ---- mascara / vidrio / geometria -------------------------------------------
+const float MASK_SCALE = 2.0;    // px de pantalla por unidad de mascara (triada = 3 unidades)
+const float MASK_DARK = 0.6;     // cuanto pasa por las franjas del color equivocado
+const float MASK_LIGHT = 1.1;    // realce de la franja propia
+const float MASK_COMP = 1.2;     // compensacion de exposicion por la mascara
+const float MISCONVERGENCE = 0.003; // corrimiento radial R/B (0 en el centro, max en esquinas)
+const float HALATION = 0.08;     // resplandor difundido en el vidrio: levanta negros vecinos
+const float NOISE = 0.006;       // ruido analogico sutil
 const float CURVATURE_X = 0.04;
 const float CURVATURE_Y = 0.03;
-const float SCANLINE_STRENGTH = 0.15;
-const float SCANLINE_SCROLL = 2.0; // pixeles por segundo: deriva vertical tipo TV vieja
-const float MASK_DARK = 0.4;
-// Desconvergencia radial: los tres canones convergen bien en el centro y se
-// desalinean hacia bordes y esquinas (R y B empujados en direcciones radiales
-// opuestas), como un CRT real. ~1.5 px de corrimiento en la esquina a 1080p.
-const float MISCONVERGENCE = 0.003;
-const float NOISE_AMOUNT_PRE = 0.01; // grano antes del blur (se funde con la rejilla)
-const float BLUR_SPREAD = 1.; // separacion entre muestras del blur general, en texels
-
-// Paleta de CRT viejo: menos gama de color que una pantalla moderna.
-const float COLOR_LEVELS = 6.0;                  // niveles por canal (bandeo retro; el grano lo difumina)
-
-// Rejilla de celdas de fosforo: celdas ligeramente mas altas que anchas,
-// brillantes en el centro y apagadas hacia el borde (glow suave, no un
-// recorte plano con un borde duro). GRID_SIZE es el unico dial de tamano:
-// el alto de la celda sale del ancho por GRID_ASPECT.
-const float GRID_SIZE = 5.;   // ancho de celda en pixeles
-const float GRID_ASPECT = 1.3; // alto = ancho * proporcion
-const vec2 GRID_CELL = vec2(GRID_SIZE, GRID_SIZE * GRID_ASPECT);
-const float GRID_DARK = .0;
-const float GRID_FALLOFF = 1.;
-const float GRID_TONE = 2.0 / (1.0 + GRID_DARK);
+const float CORNER_RADIUS = 0.035; // radio de las esquinas del tubo, en uv
+const float VIGNETTE = 0.25;
 
 // La distorsion de barril estira mas las esquinas que los bordes (el punto
 // (1,1) es siempre el que mas se estira). Dividiendo por ese estiramiento
@@ -64,101 +72,114 @@ vec3 toSrgb(vec3 c) {
   return vec3(toSrgb1(c.r), toSrgb1(c.g), toSrgb1(c.b));
 }
 
-// Aperture-grille phosphor mask (Trinitron-style RGB stripes).
-vec3 apertureMask(float xPixel) {
-  float m = mod(xPixel, GRID_CELL.x);
-  if (m < GRID_CELL.x / 3.0) return vec3(1.0, MASK_DARK, MASK_DARK);
-  if (m < GRID_CELL.x * 2.0 / 3.0) return vec3(MASK_DARK, 1.0, MASK_DARK);
-  return vec3(MASK_DARK, MASK_DARK, 1.0);
-}
-
 float rand(vec2 co) {
   return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
-// Un pixel fisico solo puede mostrar un color a la vez: el video se
-// muestrea una unica vez por celda de la rejilla (en el centro de la
-// celda), en vez de dejar que el contenido varie con suavidad dentro de
-// una misma celda como si fuera una pantalla de resolucion infinita.
-// En las celdas parciales del borde el centro puede caer algo fuera de
-// [0,1]; la textura del video usa CLAMP_TO_EDGE, asi que es inocuo.
-vec2 cellCenterUv(vec2 uv) {
-  vec2 cell = floor(uv * uResolution / GRID_CELL) + 0.5;
-  return cell * GRID_CELL / uResolution;
+// Senal de una linea en un punto: 3 taps horizontales. El filtrado pasa en el
+// dominio de la senal (gamma), igual que en el hardware analogico real.
+vec3 tapsH(vec2 posV, vec2 srcRes) {
+  vec2 uv = posV / srcRes;
+  vec2 o = vec2(H_SOFT / srcRes.x, 0.0);
+  return texture2D(uVideo, uv).rgb * 0.5
+       + texture2D(uVideo, uv - o).rgb * 0.25
+       + texture2D(uVideo, uv + o).rgb * 0.25;
 }
 
-// Brillo por celda: coseno alzado en cada eje (1.0 en el centro, 0.0 en el
-// borde) combinado en un glow rectangular, sin corte plano ni borde duro.
-float pixelGrid(vec2 pixelCoord) {
-  vec2 cellUv = fract(pixelCoord / GRID_CELL) * 2.0 - 1.0;
-  vec2 falloff = cos(clamp(cellUv, -1.0, 1.0) * 1.5707963);
-  float shade = pow(falloff.x * falloff.y, GRID_FALLOFF);
-  return mix(GRID_DARK, 1.0, shade);
-}
-
-// Calcula scanline + mascara + rejilla de fosforo para un uv puntual.
-// Se llama varias veces con pequenos desplazamientos (ver main) para
-// fundir cada celda con sus vecinas, como el desenfoque optico de una
-// pantalla CRT real que no existe al renderizar en pantallas nuevas.
-vec3 shadeAt(vec2 uv) {
-  // El contenido queda congelado al color del centro de su celda: todos
-  // los fragmentos de una celda leen el mismo texel del video. La
-  // desconvergencia desplaza ligeramente que parte del fotograma le toca a
-  // cada canal, pero sigue habiendo un solo color por celda y canal.
-  vec2 videoUv = cellCenterUv(uv);
-  // Crece con el cuadrado de la distancia al centro: el area central queda
-  // limpia y el corrimiento aparece recien hacia bordes y esquinas.
-  vec2 radial = uv - 0.5;
-  vec2 converge = radial * dot(radial, radial) * MISCONVERGENCE;
-  vec3 raw = vec3(
-    texture2D(uVideo, videoUv + converge).r,
-    texture2D(uVideo, videoUv).g,
-    texture2D(uVideo, videoUv - converge).b
+// Color de una linea de escaneo: luma nitida con desconvergencia por canal,
+// croma tomado de una version mas borrosa (menos ancho de banda, como una
+// entrada composite). Devuelve luz lineal, lista para el haz.
+vec3 fetchLine(vec2 posV, vec2 convV, vec2 srcRes) {
+  vec3 sharp = vec3(
+    tapsH(posV + convV, srcRes).r,
+    tapsH(posV, srcRes).g,
+    tapsH(posV - convV, srcRes).b
   );
-  vec3 color = toLinear(raw);
+  vec2 cs = vec2(CHROMA_SPREAD, 0.0);
+  vec3 wide = 0.5 * (texture2D(uVideo, (posV - cs) / srcRes).rgb
+                   + texture2D(uVideo, (posV + cs) / srcRes).rgb);
+  float ySharp = dot(sharp, vec3(0.299, 0.587, 0.114));
+  float yWide = dot(wide, vec3(0.299, 0.587, 0.114));
+  // wide + (ySharp - yWide) = croma borroso pero con el brillo nitido
+  vec3 mixed = mix(sharp, wide + (ySharp - yWide), CHROMA_BLEED);
+  return toLinear(clamp(mixed, 0.0, 1.0));
+}
 
-  // Scanlines: cosine-windowed line profile, computed in linear light,
-  // with exposure compensation so the average brightness is preserved.
-  float scanPhase = fract(uv.y * uResolution.y - uTime * SCANLINE_SCROLL) * 6.28318530718;
-  float scan = mix(1.0, cos(scanPhase) * 0.5 + 0.5, SCANLINE_STRENGTH);
-  float scanTone = 1.0 / (1.0 - SCANLINE_STRENGTH * 0.5);
-  color *= scan * scanTone;
+// Peso del haz a distancia d (en lineas) del centro de la linea, por canal.
+// Gaussiana normalizada: el area bajo la curva no depende del grosor, como
+// el haz real, cuya energia total la fija la corriente y no el foco. minSig
+// evita que el haz sea mas fino de lo que la resolucion de salida resuelve.
+vec3 beamWeight(float d, vec3 c, float minSig) {
+  vec3 sig = max(mix(vec3(BEAM_MIN), vec3(BEAM_MAX), clamp(c, 0.0, 1.0)), vec3(minSig));
+  vec3 x = vec3(d) / sig;
+  return exp(-0.5 * x * x) / (sig * 2.50662827);
+}
 
-  // Aperture-grille mask, likewise exposure-compensated.
-  vec3 mask = apertureMask(uv.x * uResolution.x);
-  float maskTone = 3.0 / (1.0 + 2.0 * MASK_DARK);
-  color *= mask * maskTone;
+// Rejilla de apertura (Trinitron): franjas RGB verticales continuas, sin
+// estructura vertical propia — el eje vertical queda solo para las lineas
+// de escaneo, sin interferencia entre ambos patrones. p viene en unidades
+// de mascara (px de pantalla / MASK_SCALE).
+vec3 apertureGrille(vec2 p) {
+  float px = fract(p.x / 3.0);
+  vec3 mask = vec3(MASK_DARK);
+  if (px < 1.0 / 3.0) mask.r = MASK_LIGHT;
+  else if (px < 2.0 / 3.0) mask.g = MASK_LIGHT;
+  else mask.b = MASK_LIGHT;
+  return mask;
+}
 
-  // Gap oscuro entre cada celda de fosforo, horizontal y vertical.
-  float grid = pixelGrid(uv * uResolution);
-  color *= grid * GRID_TONE;
-
-  return color;
+// Recorte del tubo: rectangulo de esquinas redondeadas con borde apenas
+// suavizado. 1.0 dentro de la pantalla, 0.0 en el bisel.
+float tubeShape(vec2 uv) {
+  vec2 d = abs(uv - 0.5) - (0.5 - CORNER_RADIUS);
+  float dist = length(max(d, 0.0)) - CORNER_RADIUS;
+  return 1.0 - smoothstep(-0.004, 0.0, dist);
 }
 
 void main() {
-  vec2 uv = clamp(warp(vUv), 0.0, 1.0);
-  vec2 texel = 1.0 / uResolution;
-  vec2 dx = vec2(texel.x * BLUR_SPREAD, 0.0);
-  vec2 dy = vec2(0.0, texel.y * BLUR_SPREAD);
+  vec2 uv = warp(vUv);
+  float shape = tubeShape(uv);
+  if (shape <= 0.0) {
+    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    return;
+  }
 
-  vec3 color = shadeAt(uv) * 0.4
-    + shadeAt(uv + dx) * 0.15
-    + shadeAt(uv - dx) * 0.15
-    + shadeAt(uv + dy) * 0.15
-    + shadeAt(uv - dy) * 0.15;
+  // Fuente virtual con pixeles cuadrados: columnas segun el aspecto real.
+  vec2 srcRes = vec2(SRC_LINES * uResolution.x / uResolution.y, SRC_LINES);
+  vec2 pos = uv * srcRes;
 
-  vec2 vigUv = uv - 0.5;
-  float vig = 1.0 - dot(vigUv, vigUv) * 0.55;
-  color *= vig;
+  // Desconvergencia radial en px virtuales: crece con el cuadrado de la
+  // distancia al centro, nula donde el ojo mira mas.
+  vec2 radial = uv - 0.5;
+  vec2 convV = radial * dot(radial, radial) * MISCONVERGENCE * srcRes;
 
-  color = toSrgb(clamp(color, 0.0, 1.0));
+  // Las dos lineas de escaneo mas cercanas (centros en k + 0.5).
+  float lineA = floor(pos.y - 0.5) + 0.5;
+  float dA = pos.y - lineA;
 
-  // Grado de color "viejo CRT": desaturar un poco, calentar el blanco y
-  // reducir la profundidad de color. El grano post disimula el bandeo.
-  float luma = dot(color, vec3(0.299, 0.587, 0.114));
-  color = floor(clamp(color, 0.0, 1.0) * COLOR_LEVELS + 0.5) / COLOR_LEVELS;
+  vec3 colA = fetchLine(vec2(pos.x, lineA), convV, srcRes);
+  vec3 colB = fetchLine(vec2(pos.x, lineA + 1.0), convV, srcRes);
 
+  float minSig = 0.6 * SRC_LINES / uResolution.y;
+  vec3 color = colA * beamWeight(dA, colA, minSig)
+             + colB * beamWeight(1.0 - dA, colB, minSig);
 
-  gl_FragColor = vec4(color, 1.0);
+  // Mascara fija al vidrio: usa el pixel fisico, no la imagen deformada.
+  color *= apertureGrille(gl_FragCoord.xy / MASK_SCALE) * MASK_COMP;
+
+  // Halation: parte de la luz rebota dentro del vidrio y vuelve difusa.
+  // Se suma despues de la mascara porque ya no respeta los fosforos.
+  vec2 hr = 4.0 / srcRes;
+  vec3 glow = 0.25 * (texture2D(uVideo, uv + hr).rgb
+                    + texture2D(uVideo, uv - hr).rgb
+                    + texture2D(uVideo, uv + vec2(hr.x, -hr.y)).rgb
+                    + texture2D(uVideo, uv + vec2(-hr.x, hr.y)).rgb);
+  color += toLinear(glow) * HALATION;
+
+  float vig = 1.0 - dot(radial, radial) * VIGNETTE;
+  color *= vig * shape;
+
+  color += (rand(uv + fract(uTime)) - 0.5) * NOISE;
+
+  gl_FragColor = vec4(toSrgb(clamp(color, 0.0, 1.0)), 1.0);
 }
