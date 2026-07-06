@@ -34,9 +34,9 @@ DRM frames read as pure black without throwing, so detection is heuristic (`cont
 Fragment shaders are standalone GLSL ES 1.00 files in `src/shaders/`, hot-swappable at runtime:
 
 ```glsl
-varying vec2 vUv;            // 0..1 quad coordinates
+varying vec2 vUv;            // 0..1 quad coordinates, y runs top-down
 uniform sampler2D uVideo;    // current video frame (CLAMP_TO_EDGE, LINEAR)
-uniform float uTime;         // seconds since activation
+uniform float uTime;         // seconds since activation; reading it makes the shader redraw at ~60 Hz
 uniform vec2 uResolution;    // canvas size in px (matches video resolution)
 ```
 

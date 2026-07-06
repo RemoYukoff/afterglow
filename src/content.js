@@ -15,6 +15,17 @@
   };
   const DEFAULT_SHADER = "crt";
 
+  // With rVFC we upload video frames to the texture only when the video
+  // actually produces one; without it the "frame due" flag just stays true
+  // and every rAF tick uploads, as before.
+  const HAS_RVFC = "requestVideoFrameCallback" in HTMLVideoElement.prototype;
+
+  // The virtual tube refreshes at 60 Hz, like the NTSC hardware the shaders
+  // imitate: animated shaders draw on its ticks, not at the monitor's rate
+  // (a 165 Hz monitor would otherwise burn ~3x the fragment work on grain
+  // and flicker that only need 60 Hz).
+  const TUBE_MS = 1000 / 60;
+
   let vertexSrcPromise = null;
   const fragmentSrcCache = new Map();
   let activating = false;
@@ -62,6 +73,9 @@
     uTime: null,
     uResolution: null,
     rafId: null,
+    vfcId: null,
+    frameDue: true,
+    lastDraw: 0,
     resizeObserver: null,
     bodyObserver: null,
     startTime: null,
@@ -188,7 +202,6 @@
     gl.vertexAttribPointer(aPosition, 2, gl.FLOAT, false, 0, 0);
 
     const texture = gl.createTexture();
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
@@ -204,6 +217,17 @@
     state.uResolution = gl.getUniformLocation(program, "uResolution");
     state.startTime = performance.now();
 
+    // The rAF loop runs at the monitor's rate (60-144 Hz) but the video
+    // decodes at 24-60 fps: most ticks would re-upload the same frame.
+    state.frameDue = true;
+    if (HAS_RVFC) {
+      const onVideoFrame = () => {
+        state.frameDue = true;
+        state.vfcId = video.requestVideoFrameCallback(onVideoFrame);
+      };
+      state.vfcId = video.requestVideoFrameCallback(onVideoFrame);
+    }
+
     state.resizeObserver = new ResizeObserver(() => syncCanvasSize());
     state.resizeObserver.observe(video);
     syncCanvasSize();
@@ -211,10 +235,12 @@
     return true;
   }
 
+  // Returns true when the drawing buffer was resized (which also clears it,
+  // so the caller must redraw even if there is no new video frame).
   function syncCanvasSize() {
-    if (!state.video || !state.canvas) return;
+    if (!state.video || !state.canvas) return false;
     const parent = state.video.parentElement;
-    if (!parent) return;
+    if (!parent) return false;
 
     const videoRect = state.video.getBoundingClientRect();
     const parentRect = parent.getBoundingClientRect();
@@ -235,7 +261,9 @@
       state.canvas.width = width;
       state.canvas.height = height;
       state.gl.viewport(0, 0, width, height);
+      return true;
     }
+    return false;
   }
 
   function renderFrame() {
@@ -244,19 +272,41 @@
     const { gl, video, texture, canvas } = state;
     if (!gl || !video || video.readyState < 2) return;
 
-    syncCanvasSize();
+    const resized = syncCanvasSize();
 
-    try {
-      gl.bindTexture(gl.TEXTURE_2D, texture);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
-    } catch (err) {
-      console.warn("[CRT] Could not read the video frame (possible cross-origin restriction). Disabling the shader.", err);
-      teardown();
-      return;
+    let uploaded = false;
+    if (state.frameDue) {
+      try {
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+      } catch (err) {
+        console.warn("[CRT] Could not read the video frame (possible cross-origin restriction). Disabling the shader.", err);
+        teardown();
+        return;
+      }
+      if (HAS_RVFC) state.frameDue = false;
+      uploaded = true;
     }
 
-    const elapsed = (performance.now() - state.startTime) / 1000;
-    gl.uniform1f(state.uTime, elapsed);
+    // Static shaders (uTime unused: the compiler strips the uniform, so its
+    // location is null) redraw only for a new frame or a resize. Animated
+    // shaders redraw on the tube's 60 Hz ticks — new frames wait for the
+    // next tick, just like a frame waits for a field on real hardware. The
+    // -2 ms slack keeps 60 Hz monitors from skipping vsyncs over timer
+    // jitter; the modulo carries the remainder so uneven tick spacing on
+    // high-refresh monitors still averages exactly 60 draws/s.
+    const now = performance.now();
+    let animDue = false;
+    if (state.uTime !== null && now - state.lastDraw >= TUBE_MS - 2) {
+      animDue = true;
+      // Advance by whole periods (at least one, even when the -2 ms slack
+      // let us draw early) so the debt/credit carries over and the average
+      // stays at 60 draws/s under any vsync spacing.
+      state.lastDraw += TUBE_MS * Math.max(1, Math.floor((now - state.lastDraw) / TUBE_MS));
+    }
+    if (!animDue && !resized && !(uploaded && state.uTime === null)) return;
+
+    gl.uniform1f(state.uTime, (now - state.startTime) / 1000);
     gl.uniform2f(state.uResolution, canvas.width, canvas.height);
 
     gl.clearColor(0, 0, 0, 1);
@@ -266,10 +316,11 @@
 
   function teardown() {
     if (state.rafId) cancelAnimationFrame(state.rafId);
+    if (state.vfcId && state.video) state.video.cancelVideoFrameCallback(state.vfcId);
     if (state.resizeObserver) state.resizeObserver.disconnect();
     if (state.canvas) state.canvas.remove();
     if (state.drmRecheck && state.video) state.video.removeEventListener("playing", state.drmRecheck);
-    state = { ...state, video: null, canvas: null, gl: null, program: null, texture: null, rafId: null, resizeObserver: null, drmRecheck: null };
+    state = { ...state, video: null, canvas: null, gl: null, program: null, texture: null, rafId: null, vfcId: null, frameDue: true, lastDraw: 0, resizeObserver: null, drmRecheck: null };
   }
 
   // Deferred DRM check. If the effect is enabled while the video is paused,

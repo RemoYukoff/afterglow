@@ -33,12 +33,25 @@
   video.muted = true;
   video.playsInline = true;
 
+  // With rVFC we upload capture frames to the texture only when the capture
+  // actually produces one; without it the "frame due" flag just stays true
+  // and every rAF tick uploads, as before.
+  const HAS_RVFC = "requestVideoFrameCallback" in HTMLVideoElement.prototype;
+
+  // The virtual tube refreshes at 60 Hz, like the NTSC hardware the shaders
+  // imitate: animated shaders draw on its ticks, not at the monitor's rate
+  // (a 165 Hz monitor would otherwise burn ~3x the fragment work on grain
+  // and flicker that only need 60 Hz).
+  const TUBE_MS = 1000 / 60;
+
   let gl = null;
   let program = null;
   let texture = null;
   let uTime = null;
   let uResolution = null;
   let rafId = null;
+  let frameDue = true;
+  let lastDraw = 0;
   let stream = null;
   let startTime = 0;
   let vertexSrc = null;
@@ -109,6 +122,10 @@
     uTime = gl.getUniformLocation(program, "uTime");
     uResolution = gl.getUniformLocation(program, "uResolution");
 
+    // Force an upload+draw so the switch shows even while the capture is
+    // paused (renderFrame skips static shaders when no new frame arrived).
+    frameDue = true;
+
     currentShaderKey = key;
     chrome.storage.local.set({ crtShader: key });
     markActiveChip();
@@ -127,7 +144,6 @@
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
 
     texture = gl.createTexture();
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
@@ -183,6 +199,8 @@
     hideTimer = setTimeout(() => switcherEl.classList.add("faded"), delay);
   }
 
+  // Returns true when the drawing buffer was resized (which also clears it,
+  // so the caller must redraw even if there is no new capture frame).
   function syncCanvasSize() {
     const w = video.videoWidth || 1280;
     const h = video.videoHeight || 720;
@@ -190,19 +208,43 @@
       canvas.width = w;
       canvas.height = h;
       gl.viewport(0, 0, w, h);
+      return true;
     }
+    return false;
   }
 
   function renderFrame() {
     rafId = requestAnimationFrame(renderFrame);
     if (video.readyState < 2) return;
-    syncCanvasSize();
+    const resized = syncCanvasSize();
 
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+    let uploaded = false;
+    if (frameDue) {
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+      if (HAS_RVFC) frameDue = false;
+      uploaded = true;
+    }
 
-    const elapsed = (performance.now() - startTime) / 1000;
-    gl.uniform1f(uTime, elapsed);
+    // Static shaders (uTime unused: the compiler strips the uniform, so its
+    // location is null) redraw only for a new frame or a resize. Animated
+    // shaders redraw on the tube's 60 Hz ticks — new frames wait for the
+    // next tick, just like a frame waits for a field on real hardware. The
+    // -2 ms slack keeps 60 Hz monitors from skipping vsyncs over timer
+    // jitter; the modulo carries the remainder so uneven tick spacing on
+    // high-refresh monitors still averages exactly 60 draws/s.
+    const now = performance.now();
+    let animDue = false;
+    if (uTime !== null && now - lastDraw >= TUBE_MS - 2) {
+      animDue = true;
+      // Advance by whole periods (at least one, even when the -2 ms slack
+      // let us draw early) so the debt/credit carries over and the average
+      // stays at 60 draws/s under any vsync spacing.
+      lastDraw += TUBE_MS * Math.max(1, Math.floor((now - lastDraw) / TUBE_MS));
+    }
+    if (!animDue && !resized && !(uploaded && uTime === null)) return;
+
+    gl.uniform1f(uTime, (now - startTime) / 1000);
     gl.uniform2f(uResolution, canvas.width, canvas.height);
 
     gl.clearColor(0, 0, 0, 1);
@@ -245,6 +287,16 @@
       await video.play();
     } catch (_) {
       /* autoplay of a muted MediaStream should not fail */
+    }
+
+    // The rAF loop runs at the monitor's rate but the capture delivers
+    // frames at its own pace: most ticks would re-upload the same frame.
+    if (HAS_RVFC) {
+      const onVideoFrame = () => {
+        frameDue = true;
+        video.requestVideoFrameCallback(onVideoFrame);
+      };
+      video.requestVideoFrameCallback(onVideoFrame);
     }
 
     try {
