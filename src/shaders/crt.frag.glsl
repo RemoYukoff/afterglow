@@ -9,7 +9,7 @@
 //  - the beam loses focus toward edges and corners
 //  - the mask (aperture grille) is fixed to the glass, not to the image
 //  - radial misconvergence, halation, overscan, vignette, curvature,
-//    warm phosphors, noise and 60 Hz flicker
+//    SMPTE C phosphors with illuminant-C white, noise and 60 Hz flicker
 precision highp float;
 
 varying vec2 vUv;
@@ -57,7 +57,26 @@ const float VIGNETTE = 0.28;
 // Phosphors / consumer-TV NTSC decoding: a slightly warm white and
 // chromas a touch muted. Subtle on purpose; this is not a sepia filter.
 const float SATURATION = 0.93;
-const vec3 WHITE_TINT = vec3(1.02, 1.0, 0.95);
+
+// White point as a linear-light, luma-preserving tint. The default is
+// illuminant C, the 1953 NTSC standard white, rendered unadapted on a D65
+// monitor: slightly cool with a whisper of magenta. Alternatives:
+//   vec3(1.02, 1.0, 0.95)      warm aged-phosphor fiction (the old default)
+//   vec3(0.846, 1.011, 1.344)  9300 K — factory white of many consumer sets
+const vec3 WHITE_TINT = vec3(1.051, 0.975, 1.100);
+
+// SMPTE C phosphor colorimetry: broadcasts were mastered for SMPTE RP 145
+// phosphors, not sRGB's primaries, so the same signal showed systematically
+// shifted colors — reds toward orange, greens a touch less acid. Derived as
+// RGB(SMPTE C) -> XYZ (D65 white) -> sRGB and applied in linear light.
+// White maps to white (each math ROW sums to 1); the white point stays
+// WHITE_TINT's job. Note GLSL fills mat3 by COLUMNS: the math rows are
+// (0.9396, 0.0502, 0.0103) / (0.0178, 0.9658, 0.0164) / (-0.0016, -0.0044, 1.0060).
+const mat3 SMPTEC_TO_SRGB = mat3(
+   0.9396,  0.0178, -0.0016,
+   0.0502,  0.9658, -0.0044,
+   0.0103,  0.0164,  1.0060
+);
 
 // Barrel distortion stretches the corners more than the edges (the point
 // (1,1) is always the one stretched the most). Dividing by that maximum
@@ -208,9 +227,11 @@ void main() {
     + texture2D(uVideo, srcUv + vec2(-h2.x, h2.y)).rgb);
   color += toLinear(glow) * HALATION;
 
-  // Phosphors / consumer decoding: desaturate slightly and warm the white.
+  // Phosphors / consumer decoding: desaturate slightly, set the white
+  // point, then map from the tube's SMPTE C phosphor space to the monitor.
   float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
   color = mix(vec3(luma), color, SATURATION) * WHITE_TINT;
+  color = SMPTEC_TO_SRGB * color;
 
   float vig = 1.0 - dot(radial, radial) * VIGNETTE;
   color *= vig;
