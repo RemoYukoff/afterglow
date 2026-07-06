@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Afterglow",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Retro display filters for any video: CRT, Game Boy, Game Boy Color, Virtual Boy, and PS1 shaders rendered in real time with WebGL.",
   "permissions": ["activeTab", "scripting", "storage", "tabCapture"],
   "icons": {
